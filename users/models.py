@@ -1,8 +1,6 @@
-from cryptography.fernet import Fernet
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 
-from config.constants import ENCRYPTION_KEY
 from core.mixins import CoreBaseModel
 
 Base = declarative_base()
@@ -14,37 +12,36 @@ class UserModel(CoreBaseModel, Base):
     access_token_encrypted = Column(String)
     refresh_token_encrypted = Column(String)
     feed_token_encrypted = Column(String, nullable=True)
-    broker_account_id = Column(String)
+    broker_account_id = Column(String, unique=True, nullable=False)
     access_token_expires = Column(Integer)
 
-    encryption_key = bytes(ENCRYPTION_KEY, "UTF-8")
 
     @property
     def access_token(self) -> str:
-        f = Fernet(self.encryption_key)
-        return f.decrypt(self.access_token_encrypted).decode()
+        # TODO: Decrypt the data before using it
+        return self.access_token_encrypted
 
     @access_token.setter
     def access_token(self, value) -> None:
-        f = Fernet(self.encryption_key)
-        self.access_token_encrypted = f.encrypt(value.encode())
+        # TODO: Encrypt the data before storing it
+        self.access_token_encrypted = value
 
     @property
     def refresh_token(self) -> str:
-        f = Fernet(self.encryption_key)
-        return f.decrypt(self.refresh_token_encrypted).decode()
+        # TODO: Decrypt the data before using it
+        return self.refresh_token_encrypted
 
     @refresh_token.setter
     def refresh_token(self, value) -> None:
-        f = Fernet(self.encryption_key)
-        self.refresh_token_encrypted = f.encrypt(value.encode())
+        # TODO: Encrypt the data before storing it
+        self.refresh_token_encrypted = value
 
     @property
     def feed_token(self) -> str:
-        f = Fernet(self.encryption_key)
-        return f.decrypt(self.feed_token_encrypted).decode()
+        # TODO: Decrypt the data before using it
+        return self.feed_token_encrypted
 
     @feed_token.setter
     def feed_token(self, value) -> None:
-        f = Fernet(self.encryption_key)
-        self.feed_token_encrypted = f.encrypt(value.encode())
+        # TODO: Encrypt the data before storing it
+        self.feed_token_encrypted = value
