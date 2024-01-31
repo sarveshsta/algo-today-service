@@ -1,0 +1,14 @@
+{
+  "python.linting.flake8Enabled": true,
+  "python.formatting.provider": "black",
+  "isort.check": true,
+  "isort.severity": {
+    "W": "Warning",
+    "E": "Hint"
+  },
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "sonarlint.analysisExcludesStandalone": "**/third_party/**,**/css/**",
+}
