@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from core.mixins import Base
+from trades.models import TokenModel  # noqa
 from users.models import UserModel  # noqa
 
 # this is the Alembic Config object, which provides

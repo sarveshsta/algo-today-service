@@ -16,8 +16,8 @@ def create_user(db: Session, user: UserCreateSchema):
         access_token=user.access_token,
         refresh_token=user.refresh_token,
         feed_token=user.feed_token,
-        broker_account_id = user.broker_account_id,
-        access_token_expires = user.access_token_expires
+        broker_account_id=user.broker_account_id,
+        access_token_expires=user.access_token_expires,
     )
     db.add(db_user)
     db.commit()

@@ -5,3 +5,8 @@ python-decouple==3.8
 psycopg2==2.9.*
 alembic==1.11.*
 SQLAlchemy==2.0.20
+redis==4.6.*
+redis-om==0.*
+
+
+-r trades\\requirements.txt
