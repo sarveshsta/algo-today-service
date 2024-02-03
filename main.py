@@ -1,9 +1,8 @@
 from fastapi import FastAPI
-from redis import Redis
-from rq import Queue
+from redis_om import get_redis_connection
 
 import users.models as user_models
-from config.constants import REDIS_HOST, REDIS_PORT
+from config.constants import REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 from config.database.config import engine
 from users import route as user_route
 
@@ -20,7 +19,12 @@ app = FastAPI(
     license_info=None,
 )
 
-redis_conn = Redis(host=REDIS_HOST, port=REDIS_PORT)
-task_queue = Queue("task_queue", connection=redis_conn)
+redis = get_redis_connection(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    password=REDIS_PASSWORD,
+    decode_responses=True,
+)
+
 
 app.include_router(user_route.router, prefix="/users", tags=["users"])
