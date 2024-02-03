@@ -1,9 +1,6 @@
 from sqlalchemy import Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
 
-from core.mixins import CoreBaseModel
-
-Base = declarative_base()
+from core.mixins import Base, CoreBaseModel
 
 
 class UserModel(CoreBaseModel, Base):
@@ -14,7 +11,6 @@ class UserModel(CoreBaseModel, Base):
     feed_token_encrypted = Column(String, nullable=True)
     broker_account_id = Column(String, unique=True, nullable=False)
     access_token_expires = Column(Integer)
-
 
     @property
     def access_token(self) -> str:

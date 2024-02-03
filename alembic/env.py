@@ -1,9 +1,11 @@
 from logging.config import fileConfig
 
+from decouple import config as decouple_config
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from decouple import config as decouple_config
+from core.mixins import Base
+from users.models import UserModel  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,7 +20,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = metadata
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -30,9 +32,7 @@ db_driver = decouple_config("DATABASE_URI")
 db_driver_parts = db_driver.split("+")
 if len(db_driver_parts) > 1:  # e.g. postgresql+asyncpg
     sync_scheme = db_driver_parts[0].strip()
-    DATABASE_URL = DATABASE_URL.replace(  # replace with sync driver
-        db_driver, sync_scheme
-    )
+    DATABASE_URL = DATABASE_URL.replace(db_driver, sync_scheme)  # replace with sync driver
 
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 config.compare_type = True
