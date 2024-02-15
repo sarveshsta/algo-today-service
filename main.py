@@ -7,6 +7,7 @@ import trades.models as trades_models
 import users.models as user_models
 from config.constants import REDIS_HOST, REDIS_PASSWORD, REDIS_PORT
 from config.database.config import engine
+from core.events import NotEventException, handle_activity
 from core.redis import PubSubClient
 from trades import route as trade_route
 from users import route as user_route
@@ -32,7 +33,10 @@ async def lifespan(app: FastAPI):
 
 async def message_listener(pubsub_client: PubSubClient):
     async for message in pubsub_client.listen():
-        pubsub_client.message_handler(message)
+        try:
+            handle_activity(message, pubsub_client)
+        except NotEventException:
+            pass
 
 
 app = FastAPI(

@@ -38,3 +38,6 @@ class PubSubClient:
 
     async def unsubscribe_from_channel(self, channel_name):
         await self.unsubscribe(channel_name)
+
+    def publish(self, channel_name: str, message: dict) -> None:
+        self.client.publish(channel_name, message)

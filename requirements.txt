@@ -6,6 +6,6 @@ psycopg2==2.9.*
 alembic==1.11.*
 SQLAlchemy==2.0.20
 redis==4.6.*
-
+email-validator==2.1
 
 -r trades\\requirements.txt
