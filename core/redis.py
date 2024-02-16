@@ -1,4 +1,7 @@
+import asyncio
+
 import aioredis
+from asgiref.sync import async_to_sync
 
 
 class PubSubClient:
@@ -40,4 +43,4 @@ class PubSubClient:
         await self.unsubscribe(channel_name)
 
     def publish(self, channel_name: str, message: dict) -> None:
-        self.client.publish(channel_name, message)
+        return self.client.publish(channel_name, message)

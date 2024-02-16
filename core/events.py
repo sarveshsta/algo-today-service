@@ -1,9 +1,11 @@
 import json
+import uuid
 
 from core.logger import FileLogger
 from core.redis import PubSubClient
 
 logger = FileLogger("pubsub_events.log")
+CHANNEL_NAME = "trade-services"
 
 
 class NotEventException(Exception):
@@ -33,13 +35,23 @@ class Event:
     event_type = None
     event_data = None
 
-    def __init__(self, event_type, **event_data):
-        self.event_type = event_type
+    def __init__(self, event_data):
+        self.event_id = uuid.uuid4()
         self.event_data = event_data
         logger.log("info", f"{self}")
 
     def __str__(self):
-        return f"{self.event_type}: {self.event_data}"
+        return f"[{self.event_id}] {self.event_type}: {self.event_data}"
+
+    def to_dict(self):
+        return {
+            "event_id": str(self.event_id),
+            "event_type": self.event_type,
+            "event_data": self.event_data,
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict())
 
     def get_event_type(self):
         """Get the type of event."""
@@ -57,7 +69,7 @@ class SmartAPIEvent(Event):
 
     def activity(self, pubsub: PubSubClient | None = None, data: dict | None = None):
         """Method to be implemented"""
-        pubsub.publish("trade-services", data)
+        return pubsub.publish(CHANNEL_NAME, data)
 
 
 class UserEvent(Event):
