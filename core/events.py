@@ -1,11 +1,13 @@
 import json
 import uuid
 
+from config.constants import SERVICE_NAME
 from core.logger import FileLogger
 from core.redis import PubSubClient
 
 logger = FileLogger("pubsub_events.log")
-CHANNEL_NAME = "trade-services"
+
+CHANNEL_NAME = SERVICE_NAME
 
 
 class NotEventException(Exception):

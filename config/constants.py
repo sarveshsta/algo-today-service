@@ -14,3 +14,5 @@ API_KEY = config("API_KEY")
 CLIENT_CODE = config("CLIENT_CODE")
 PASSWORD = config("PASSWORD")
 TOKEN_CODE = config("TOKEN_CODE")
+
+SERVICE_NAME = config("SERVICE_NAME")

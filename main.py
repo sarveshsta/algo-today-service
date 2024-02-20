@@ -5,7 +5,16 @@ from fastapi import FastAPI
 
 import trades.models as trades_models
 import users.models as user_models
-from config.constants import API_KEY, CLIENT_CODE, PASSWORD, REDIS_HOST, REDIS_PASSWORD, REDIS_PORT, TOKEN_CODE
+from config.constants import (
+    API_KEY,
+    CLIENT_CODE,
+    PASSWORD,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    SERVICE_NAME,
+    TOKEN_CODE,
+)
 from config.database.config import engine
 from core.events import NotEventException, handle_activity
 from core.redis import PubSubClient
@@ -20,13 +29,15 @@ trades_models.Base.metadata.create_all(bind=engine)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # things to do on start-ups
-    channel_name = "trade-services"
+    channel_name = SERVICE_NAME
+    app.state.channel_name = channel_name
+
     pubsub_client = PubSubClient()
     pubsub_client.create_connection(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD)
     pubsub_client.create_psub()
     await pubsub_client.subscribe(channel_name)
 
-    token_list = [{"exchangeType": 2, "tokens": ["36454"]}]
+    token_list = [{"exchangeType": 2, "tokens": ["72218"]}]
     trade_websocket = WSApp(
         api_key=API_KEY,
         token_code=TOKEN_CODE,

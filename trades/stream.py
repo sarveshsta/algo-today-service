@@ -69,7 +69,7 @@ class WSApp:
 
     def on_open(self, wsapp):
         token_list = self.token_listener or []
-        self.sws.subscribe("abc123", 1, token_list)
+        self.sws.subscribe("abc123", 2, token_list)
 
     def on_error(self, wsapp, error):
         print("data: ON ERROR", error)
@@ -82,64 +82,3 @@ class WSApp:
 
     def connect(self):
         self.sws.connect()
-
-
-# class WSApp:
-#     def __init__(
-#         self,
-#         api_key: str,
-#         token_code: str,
-#         client_code: str,
-#         password: str,
-#         token_listener: list,
-#         pubsub: PubSubClient,
-#     ) -> None:
-#         self.api_key = api_key
-#         self.token_listener = token_listener
-#         self.pubsub = pubsub
-#         smart = SmartConnect(api_key=self.api_key)
-#         data = smart.generateSession(
-#             clientCode=client_code,
-#             password=password,
-#             totp=pyotp.TOTP(token_code).now(),
-#         )
-#         auth_token = data["data"]["jwtToken"]
-#         feed_token = smart.getfeedToken()
-
-#         self.sws = SmartWebSocketV2(
-#             auth_token=auth_token,
-#             api_key=self.api_key,
-#             client_code=client_code,
-#             feed_token=feed_token,
-#         )
-
-#         self._token_list = []
-
-#         # Assign the callbacks
-#         self.sws.on_open = self.on_open
-#         self.sws.on_data = self.on_data
-#         self.sws.on_error = self.on_error
-#         self.sws.on_close = self.on_close
-
-#     def publish_to_redis(self, channel_name, message):
-#         threading.Thread(target=self.pubsub.publish, args=(channel_name, message)).start()
-
-#     def on_data(self, wsapp, message):
-#         self.publish_to_redis(CHANNEL_NAME, message)
-
-#     def on_open(self, wsapp):
-#         print("data: ON OPEN")
-#         token_list = self.token_listener or []
-#         self.sws.subscribe(CHANNEL_NAME, 1, token_list)
-
-#     def on_error(self, wsapp, error):
-#         print("data: ON ERROR", error)
-
-#     def on_close(self, wsapp):
-#         print("data: ON CLOSE")
-
-#     def close_connection(self):
-#         self.sws.close_connection()
-
-#     def connect(self):
-#         self.sws.connect()
