@@ -134,3 +134,4 @@ dmypy.json
 
 node_modules/
 media/
+pubsub_events.log.*
