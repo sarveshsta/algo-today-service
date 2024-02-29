@@ -71,7 +71,7 @@ class SmartAPIEvent(Event):
 
     def activity(self, pubsub: PubSubClient | None = None, data: dict | None = None):
         """Method to be implemented"""
-        return pubsub.publish(CHANNEL_NAME, data)
+        return pubsub.publish(CHANNEL_NAME, self.to_json())
 
 
 class UserEvent(Event):
@@ -94,7 +94,6 @@ class TradeEvent(Event):
 
 def handle_activity(message: dict | bytes, pubsub: PubSubClient):
     data = message.get("data")
-    print(data)
     if message.get("type") == "message" and isinstance(data, str):
         try:
             data = json.loads(data)

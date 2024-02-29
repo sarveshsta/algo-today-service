@@ -47,14 +47,13 @@ async def lifespan(app: FastAPI):
         pubsub=pubsub_client,
     )
 
-    trade_websocket.connect()
-
     # execute in background thread
     reader_task = asyncio.create_task(message_listener(pubsub_client))
+    trade_websocket.connect()
 
     yield
     # things to do on shutdown
-    print("shutting down")
+    trade_websocket.close_connection()
     await pubsub_client.unsubscribe_from_channel(channel_name)
     reader_task.cancel()
 

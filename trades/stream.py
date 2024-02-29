@@ -72,13 +72,17 @@ class WSApp:
         self.sws.subscribe("abc123", 2, token_list)
 
     def on_error(self, wsapp, error):
-        print("data: ON ERROR", error)
+        self.loop.stop()
 
     def on_close(self, wsapp):
-        print("data: ON CLOSE")
+        self.loop.stop()
 
     def close_connection(self):
         self.sws.close_connection()
 
     def connect(self):
-        self.sws.connect()
+        try:
+            self.connect_thread = threading.Thread(target=self.sws.connect, daemon=True)
+            self.connect_thread.start()
+        except Exception as e:
+            print(e)

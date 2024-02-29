@@ -1,7 +1,4 @@
-import asyncio
-
 import aioredis
-from asgiref.sync import async_to_sync
 
 
 class PubSubClient:
