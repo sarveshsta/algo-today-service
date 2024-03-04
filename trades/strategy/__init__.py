@@ -136,12 +136,15 @@ class MaxMinOfLastTwo(IndicatorInterface):
     cum_profit = 0
     trades_count = 0
     current_index = 0
+    LAST_OHLC = 4
+    SECOND_LAST_OHLC = 5
+    CURRENT_OHLC = 5
 
     def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
         print("Index: ", index)
-        print("Data: ", data.iloc[index])
+        print("Data: ", data.iloc[self.CURRENT_OHLC])
         if index == 2:
-            previous_max_high = max(data["High"].iloc[index - 1], data["High"].iloc[index - 2])
+            previous_max_high = max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
             new_high = previous_max_high * self.DOUBLE_HIGH_MULTIPLIER
 
             self.to_buy = False
@@ -151,7 +154,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
             return Signal.WAITING_TO_BUY, self.bought_price
         if index > 2:
             if not self.to_buy and not self.to_sell and self.waiting_for_buy:
-                if data["High"].iloc[index] > self.bought_price:
+                if data["High"].iloc[self.CURRENT_OHLC] > self.bought_price:
                     self.to_buy = False
                     self.to_sell = True
                     self.waiting_for_buy = False
@@ -159,9 +162,10 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 if self.waiting_for_buy:
                     previous_max_high = (
-                        max(data["High"].iloc[index - 1], data["High"].iloc[index - 2]) * self.DOUBLE_HIGH_MULTIPLIER
+                        max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
+                        * self.DOUBLE_HIGH_MULTIPLIER
                     )
-                    previous_high = (data["High"].iloc[index - 1]) * self.SINGLE_HIGH_MULTIPLIER
+                    previous_high = (data["High"].iloc[self.LAST_OHLC]) * self.SINGLE_HIGH_MULTIPLIER
                     new_high = min(previous_max_high, previous_high)
                     if new_high != self.bought_price:
                         self.bought_price = new_high
@@ -169,10 +173,10 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
             elif not self.to_buy and self.to_sell:
                 last_two_low = []
-                last_two_low.append(data["Low"].iloc[index - 2])
-                last_two_low.append(data["Low"].iloc[index - 1])
+                last_two_low.append(data["Low"].iloc[self.SECOND_LAST_OHLC])
+                last_two_low.append(data["Low"].iloc[self.LAST_OHLC])
                 min_last_two_low = self.DOUBLE_LOW_MULTIPLIER * min(last_two_low)
-                previous_low = (data["Low"].iloc[index - 1]) * self.SINGLE_LOW_MULTIPLIER
+                previous_low = (data["Low"].iloc[self.LAST_OHLC]) * self.SINGLE_LOW_MULTIPLIER
                 new_low = max(min_last_two_low, previous_low)
                 self.sold_price = new_low
                 self.to_buy = False
@@ -181,7 +185,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 return Signal.WAITING_TO_SELL, self.sold_price
 
             elif not self.to_buy and not self.to_sell and self.waiting_for_sell:
-                if data["Low"].iloc[index] < self.sold_price:
+                if data["Low"].iloc[self.CURRENT_OHLC] < self.sold_price:
                     self.trades_count += 1
                     self.to_buy = True
                     self.to_sell = False
@@ -189,17 +193,17 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     return Signal.BUY, self.sold_price
                 if self.waiting_for_sell:
                     last_two_low = []
-                    last_two_low.append(data["Low"].iloc[index - 2])
-                    last_two_low.append(data["Low"].iloc[index - 1])
+                    last_two_low.append(data["Low"].iloc[self.SECOND_LAST_OHLC])
+                    last_two_low.append(data["Low"].iloc[self.LAST_OHLC])
                     min_last_two_low = self.DOUBLE_LOW_MULTIPLIER * min(last_two_low)
-                    previous_low = (data["Low"].iloc[index - 1]) * self.SINGLE_LOW_MULTIPLIER
+                    previous_low = (data["Low"].iloc[self.LAST_OHLC]) * self.SINGLE_LOW_MULTIPLIER
                     new_low = max(min_last_two_low, previous_low)
                     if new_low != self.sold_price:
                         self.sold_price = new_low
                         return Signal.WAITING_TO_SELL, self.sold_price
 
             elif self.to_buy and not self.to_sell:
-                previous_max_high = max(data["High"].iloc[index - 1], data["High"].iloc[index - 2])
+                previous_max_high = max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
                 new_high = previous_max_high * self.DOUBLE_HIGH_MULTIPLIER
                 self.to_buy = False
                 self.to_sell = False
@@ -234,8 +238,6 @@ class BaseStrategy:
             print("_" * 10)
             print("Signal: ", signal)
             print("Price: ", price)
-            print("Data: ", token_data.iloc[index])
-            print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
 
     def start_strategy(self):
