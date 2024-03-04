@@ -99,10 +99,9 @@ class SmartApiDataProvider(DataProviderInterface):
 
     def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE") -> pd.DataFrame:
         to_date = datetime.now()
-        from_date = to_date - timedelta(days=5)
+        from_date = to_date - timedelta(minutes=5)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
         to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
-
         historic_params = {
             "exchange": token.exch_seg,
             "symboltoken": token.token_id,
@@ -114,6 +113,7 @@ class SmartApiDataProvider(DataProviderInterface):
 
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         data = pd.DataFrame(res_json["data"], columns=columns)
+        print("Data Provided: ", data)
         return data
 
 
@@ -138,6 +138,8 @@ class MaxMinOfLastTwo(IndicatorInterface):
     current_index = 0
 
     def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
+        print("Index: ", index)
+        print("Data: ", data.iloc[index])
         if index == 2:
             previous_max_high = max(data["High"].iloc[index - 1], data["High"].iloc[index - 2])
             new_high = previous_max_high * self.DOUBLE_HIGH_MULTIPLIER
@@ -230,7 +232,10 @@ class BaseStrategy:
         for token, token_data in data.items():
             signal, price = self.indicator.check_indicators(token_data, index)
             print("_" * 10)
-            print(signal, price)
+            print("Signal: ", signal)
+            print("Price: ", price)
+            print("Data: ", token_data.iloc[index])
+            print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
 
     def start_strategy(self):
@@ -268,7 +273,7 @@ data = smart.generateSession(
 auth_token = data["data"]["jwtToken"]
 feed_token = smart.getfeedToken()
 
-instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, ["BANKNIFTY29FEB2446800CE"])
+instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, ["BANKNIFTY06MAR2447000CE"])
 smart_api_provider = SmartApiDataProvider(smart)
 max_transactions_indicator = MaxMinOfLastTwo()
 strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator)

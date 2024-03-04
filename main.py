@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     pubsub_client.create_psub()
     await pubsub_client.subscribe(channel_name)
 
-    token_list = [{"exchangeType": 2, "tokens": ["72218"]}]
+    token_list = [{"exchangeType": 2, "tokens": ["67567"]}]
     trade_websocket = WSApp(
         api_key=API_KEY,
         token_code=TOKEN_CODE,
