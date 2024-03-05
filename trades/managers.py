@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
 from trades.models import TokenModel
-from trades.schema import TokenSchema
 
 
 def get_tokens(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
