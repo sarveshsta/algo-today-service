@@ -38,3 +38,25 @@ def retrieve_token(symbol: str, db: Session = Depends(get_db)):
     if token:
         return token
     return None
+
+
+def retrieve_expiry(index: str, db: Session = Depends(get_db)):
+    indexes = db.query(TokenModel).filter(TokenModel.name == index).all()
+
+    if indexes:
+        response_list = [{"name": ind.name, "symbol": ind.symbol, "expiry": str(ind.expiry_date)} for ind in indexes]
+        # print(response_list)
+        return response_list
+    return None
+
+
+def retrieve_strike_price(index: str, expiry: str, db: Session = Depends(get_db)):
+    indexes = db.query(TokenModel).filter(TokenModel.name == index, TokenModel.expiry_date == expiry).all()
+    print(indexes)
+    if indexes:
+        response_list = [{"name": ind.name, "symbol": ind.symbol, "expiry": str(ind.expiry_date), "strike_price": ind.strike} for ind in indexes]
+        # print(response_list)
+        return response_list
+    return None
+    
+    

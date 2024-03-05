@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from config.database.config import get_db
-from trades.managers import delete_all_tokens, fetch_tokens, get_tokens, retrieve_token
-from trades.schema import TokenSchema
+from trades.managers import *
+from trades.schema import TokenSchema, ExpirySchema
 
 router = fastapi.APIRouter()
 
@@ -30,6 +30,22 @@ def create_index_tokens(db: Session = Depends(get_db)):
     return JSONResponse({"success": True}, status_code=201)
 
 
-@router.get("/{symbol}", response_model=TokenSchema)
-def retrieve_token_by_symbol(symbol: str, db: Session = Depends(get_db)):
-    return retrieve_token(symbol, db)
+# @router.get('/{symbol}', response_model=TokenSchema)
+# async def retrieve_token_by_symbol(symbol: str, db: Session = Depends(get_db)):
+#     print("SYMBOL", symbol)
+#     return retrieve_token(symbol, db)
+
+
+
+@router.get('/{index}', response_model=List[ExpirySchema])
+async def get_index_expiry(index:str, db: Session = Depends(get_db)):
+    response = retrieve_expiry(index, db)
+    if not response:  return JSONResponse({"success": False, "data":response}, status_code=404)
+    return JSONResponse({"success": True, "data":response}, status_code=200)
+
+
+@router.get('/{index}/{expiry}', response_model=List[ExpirySchema])
+async def get_index_strike_price(index:str, expiry: str,  db: Session = Depends(get_db)):
+    response = retrieve_strike_price(index, expiry, db)
+    if not response:  return JSONResponse({"success": False, "data":response}, status_code=404)
+    return JSONResponse({"success": True, "data":response}, status_code=200)
