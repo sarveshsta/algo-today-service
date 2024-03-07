@@ -3,16 +3,17 @@ import time
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
-from typing import List, Union
-from urllib.error import HTTPError, URLError
+from typing import List
+from urllib.error import URLError
 
 import pandas as pd
-import pandas_ta as ta
-import pyotp
-import requests
+import requests, pyotp
 from SmartApi import SmartConnect
 
-# from config.constants import API_KEY, CLIENT_CODE, PASSWORD, TOKEN_CODE
+from config.constants import SERVICE_NAME
+from core.events import TradeEvent
+from core.redis import PubSubClient
+from trades.indicators import IndicatorInterface, Signal, MaxMinOfLastTwo
 
 
 class CandleDuration(Enum):
@@ -20,13 +21,6 @@ class CandleDuration(Enum):
     THREE_MINUTE = "THREE_MINUTE"
     FIVE_MINUTE = "FIVE_MINUTE"
     TEN_MINUTE = "TEN_MINUTE"
-
-
-class Signal(Enum):
-    BUY = 1
-    SELL = 2
-    WAITING_TO_BUY = 3
-    WAITING_TO_SELL = 4
 
 
 class Token:
@@ -97,9 +91,11 @@ class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect):
         self.__smart = smart
 
-    def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE") -> pd.DataFrame:
+    def fetch_candle_data(
+        self, token: Token, duration: int = 5, interval: CandleDuration = CandleDuration.ONE_MINUTE
+    ) -> pd.DataFrame:
         to_date = datetime.now()
-        from_date = to_date - timedelta(minutes=5)
+        from_date = to_date - timedelta(minutes=duration)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
         to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
         historic_params = {
@@ -113,7 +109,6 @@ class SmartApiDataProvider(DataProviderInterface):
 
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         data = pd.DataFrame(res_json["data"], columns=columns)
-        print("Data Provided: ", data)
         return data
 
 
@@ -251,21 +246,38 @@ class MaxMinOfLastTwo(IndicatorInterface):
     #     return None, None
 
 
+class PublisherInterface:
+    publisher = None
+
+    def publish(self, data: dict):
+        raise NotImplementedError("Subclasses must implement publish()")
+
+
+class RedisPublisherInterface(PublisherInterface):
+    def __init__(self, pubsub: PubSubClient) -> None:
+        self.publisher = pubsub
+
+    def publish(self, data: dict):
+        self.publisher.publish(SERVICE_NAME, data)
+
 
 class BaseStrategy:
-    def __init__(
+    def _init_(
         self,
         instrument_reader: InstrumentReaderInterface,
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
+        publisher: PublisherInterface,
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
         self.indicator = indicator
+        self.publisher = publisher
 
-    def signal(self, direction: str):
+    def signal(self, direction: str, price: float) -> None:
         # Placeholder method to send signals to the event bus
-        print(f"Sending {direction} signal to event bus")
+        event = TradeEvent({"signal": direction, "price": price})
+        self.publisher.publish(event.to_json())
 
     def process_data(self, index: int):
         # Fetch data for all tokens
@@ -273,12 +285,26 @@ class BaseStrategy:
         data = {token: self.data_provider.fetch_candle_data(token) for token in nfo_tokens}
         for token, token_data in data.items():
             signal, price = self.indicator.check_indicators(token_data, index)
+            
             print("_" * 10)
             print("Signal: ", signal)
             print("Price: ", price)
             print("Data: ", token_data.iloc[index])
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
+
+            match(signal):
+                case Signal.BUY:
+                    self.signal("BUY", price)
+                case Signal.SELL:
+                    self.signal("SELL", price)
+                case Signal.WAITING_TO_BUY:
+                    self.signal("WAITING_TO_BUY", price)
+                case Signal.WAITING_TO_SELL:
+                    self.signal("WAITING_TO_SELL", price)
+                case _:
+                    # Implement the logic if require to handle
+                    pass
 
     def start_strategy(self):
         index = 0
