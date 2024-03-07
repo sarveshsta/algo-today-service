@@ -119,6 +119,13 @@ class PublisherInterface:
         raise NotImplementedError("Subclasses must implement publish()")
 
 
+class PublisherInterface:
+    publisher = None
+
+    def publish(self, data: dict):
+        raise NotImplementedError("Subclasses must implement publish()")
+
+
 class RedisPublisherInterface(PublisherInterface):
     def __init__(self, pubsub: PubSubClient) -> None:
         self.publisher = pubsub
@@ -151,6 +158,26 @@ class BaseStrategy:
         data = {token: self.data_provider.fetch_candle_data(token) for token in nfo_tokens}
         for token, token_data in data.items():
             signal, price = self.indicator.check_indicators(token_data, index)
+
+            match(signal):
+                case Signal.BUY:
+                    self.signal("BUY", price)
+                case Signal.SELL:
+                    self.signal("SELL", price)
+                case Signal.WAITING_TO_BUY:
+                    self.signal("WAITING_TO_BUY", price)
+                case Signal.WAITING_TO_SELL:
+                    self.signal("WAITING_TO_SELL", price)
+                case _:
+                    # Implement the logic if require to handle
+                    pass
+            
+            print("_" * 10)
+            print("Signal: ", signal)
+            print("Price: ", price)
+            print("Data: ", token_data.iloc[index])
+            print("Time: ", token_data.iloc[index]["timestamp"])
+            print("_" * 10)
 
             match(signal):
                 case Signal.BUY:
