@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+import uvicorn
 
 from fastapi import FastAPI
 
@@ -81,3 +82,6 @@ app = FastAPI(
 
 app.include_router(user_route.router, prefix="/users", tags=["users"])
 app.include_router(trade_route.router, prefix="/tokens", tags=["tokens"])
+
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
