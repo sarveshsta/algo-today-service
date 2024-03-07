@@ -14,3 +14,11 @@ class TokenSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ExpirySchema(BaseModel):
+    token: str
+    symbol: str
+    index: str
+    expiry: str
+    class Config:
+        from_attributes = True
