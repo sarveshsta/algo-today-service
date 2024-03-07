@@ -135,11 +135,14 @@ class MaxMinOfLastTwo(IndicatorInterface):
     cum_profit = 0
     trades_count = 0
     current_index = 0
-    # LAST_OHLC = 4
-    # SECOND_LAST_OHLC = 5
+    LAST_OHLC = 4
+    SECOND_LAST_OHLC = 5
     CURRENT_OHLC = 5
+    candle_variable = 3
+
 
     def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
+        for variable in candle
         current_open = data["Open"].iloc[self.CURRENT_OHLC]
         last_third_open = data["Open"].iloc[self.CURRENT_OHLC - 2]
         print("LATEST/LAST CANDLE OPEN", f"{current_open} ** {last_third_open}")
@@ -176,6 +179,45 @@ class MaxMinOfLastTwo(IndicatorInterface):
         else:
             self.waiting_for_buy = True
             return Signal.WAITING_TO_BUY, self.price
+            
+    # first simple strategy
+    # def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
+    #     current_open = data["Open"].iloc[self.CURRENT_OHLC]
+    #     last_third_open = data["Open"].iloc[self.CURRENT_OHLC - 2]
+    #     print("LATEST/LAST CANDLE OPEN", f"{current_open} ** {last_third_open}")
+
+    #     # condition to buy
+    #     if not self.to_buy:
+    #         if current_open >= (last_third_open + (last_third_open * 0.01)):
+    #             self.to_buy = True
+    #             self.waiting_for_sell = True
+
+    #             self.to_sell = False
+    #             self.waiting_for_buy = False
+    #             self.price = current_open
+    #             return Signal.BUY, self.price
+    #         return Signal.WAITING_TO_BUY, self.price
+        
+    #     # condition to sell 
+    #     elif self.to_buy and not self.to_sell and self.waiting_for_sell:
+    #         if (data["High"].iloc[self.CURRENT_OHLC - 2] >= self.price * 1.10) or \
+    #                 (data["Low"].iloc[self.CURRENT_OHLC - 2] <= self.price * 0.95):
+    #             self.to_sell = True
+    #             self.waiting_for_buy = True
+
+    #             self.to_buy = False
+    #             self.waiting_for_sell = False
+
+    #             return Signal.SELL, self.price
+    #         return Signal.WAITING_TO_SELL, self.price
+
+    #     elif not self.to_sell and self.to_buy and not self.waiting_for_buy:
+    #         self.waiting_for_sell = True
+    #         return Signal.WAITING_TO_SELL, self.price
+        
+    #     else:
+    #         self.waiting_for_buy = True
+    #         return Signal.WAITING_TO_BUY, self.price
             
     # def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
     #     print("Index: ", index)
