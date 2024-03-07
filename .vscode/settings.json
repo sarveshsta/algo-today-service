@@ -11,4 +11,5 @@
   },
   "editor.formatOnSave": true,
   "sonarlint.analysisExcludesStandalone": "**/third_party/**,**/alembic/**",
+  "python.analysis.typeCheckingMode": "basic"
 }
