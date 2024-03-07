@@ -138,11 +138,9 @@ class MaxMinOfLastTwo(IndicatorInterface):
     LAST_OHLC = 4
     SECOND_LAST_OHLC = 5
     CURRENT_OHLC = 5
-    candle_variable = 3
 
 
     def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
-        for variable in candle
         current_open = data["Open"].iloc[self.CURRENT_OHLC]
         last_third_open = data["Open"].iloc[self.CURRENT_OHLC - 2]
         print("LATEST/LAST CANDLE OPEN", f"{current_open} ** {last_third_open}")
