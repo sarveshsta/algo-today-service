@@ -84,7 +84,6 @@ app = FastAPI(
 app.include_router(user_route.router, prefix="/users", tags=["users"])
 app.include_router(trade_route.router, prefix="/tokens", tags=["tokens"])
 
-app = App()
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
