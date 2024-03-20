@@ -104,3 +104,22 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 return Signal.WAITING_TO_BUY, self.bought_price
 
         return None, None
+
+
+class StrategyOne(IndicatorInterface):
+    DOUBLE_HIGH_MULTIPLIER = 1.012
+    DOUBLE_LOW_MULTIPLIER = 0.988
+    SINGLE_LOW_MULTIPLIER = 1.032
+    SINGLE_HIGH_MULTIPLIER = 0.968
+    to_buy = False
+    to_sell = False
+    waiting_for_sell = False
+    waiting_for_buy = False
+    bought_price = 0
+    sold_price = 0
+    cum_profit = 0
+    trades_count = 0
+    current_index = 0
+    LAST_OHLC = 4
+    SECOND_LAST_OHLC = 5
+    CURRENT_OHLC = 5
