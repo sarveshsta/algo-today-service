@@ -36,7 +36,6 @@ def create_index_tokens(db: Session = Depends(get_db)):
 #     return retrieve_token(symbol, db)
 
 
-
 @router.get('/{index}', response_model=List[ExpirySchema])
 async def get_index_expiry(index:str, db: Session = Depends(get_db)):
     response = retrieve_expiry(index, db)
