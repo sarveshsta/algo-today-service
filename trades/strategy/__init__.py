@@ -18,6 +18,7 @@ from SmartApi import SmartConnect
 class CandleDuration(Enum):
     ONE_MINUTE = "ONE_MINUTE"
     THREE_MINUTE = "THREE_MINUTE"
+    FOUR_MINUTE = "FOUR_MINUTE"
     FIVE_MINUTE = "FIVE_MINUTE"
     TEN_MINUTE = "TEN_MINUTE"
 
@@ -76,17 +77,18 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
         try:
             # Robust error handling to ensure proper data reading
             response = requests.get(self.url)
-            response.raise_for_status()  # Raise an exception for HTTP errors
+            # print("Response", response)
+            response.raise_for_status()
             data = response.json()
             return [
                 Instrument(**item)
                 for item in data
-                if item["exch_seg"] == "NFO" and item["symbol"] in self.tokens  # Filter for NFO instruments only
+                if item["exch_seg"] == "NFO" and item["symbol"] in self.tokens
             ]
         except (URLError, JSONDecodeError) as e:
             print(f"Error reading instruments from {self.url}: {e}")
             return []
-
+    
 
 class DataProviderInterface:
     def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE") -> pd.DataFrame:
@@ -113,7 +115,7 @@ class SmartApiDataProvider(DataProviderInterface):
 
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         data = pd.DataFrame(res_json["data"], columns=columns)
-        print("Data Provided: ", data)
+        # print("Data Provided: ", data)
         return data
 
 
@@ -138,35 +140,42 @@ class MaxMinOfLastTwo(IndicatorInterface):
     LAST_OHLC = 4
     SECOND_LAST_OHLC = 5
     CURRENT_OHLC = 5
+    trade_details = {"done": False, "index": None}
 
-
-    def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
-        current_open = data["Open"].iloc[self.CURRENT_OHLC]
-        last_third_open = data["Open"].iloc[self.CURRENT_OHLC - 2]
-        print("LATEST/LAST CANDLE OPEN", f"{current_open} ** {last_third_open}")
-
-        # condition to buy
+    def check_indicators(self, data: pd.DataFrame, token:pd.DataFrame,  index: int = 0) -> tuple[Signal, float]:
+        current_high = data["High"].iloc[-1]
+        last_second_high = data["Open"].iloc[-2]
+        last_third_high = data["Open"].iloc[-3]
+        token = str(token).split(':')[-1]
+        print("DATA FRAME", data)
         if not self.to_buy:
-            if current_open >= (last_third_open + (last_third_open * 0.01)):
+            if current_high >= (last_second_high + (last_second_high * 0.01)) or current_high >= (last_third_high + (last_third_high * 0.01)):
+                print("CH/CH1/CH2", current_high, last_second_high, last_third_high)
                 self.to_buy = True
                 self.waiting_for_sell = True
 
                 self.to_sell = False
                 self.waiting_for_buy = False
-                self.price = current_open
+                self.price = current_high
+                self.trade_details['done'] = True
+                self.trade_details['index'] = token
+                print("TRADE BOUGHT", self.trade_details)
+                print("Bought Price", self.price,  )
                 return Signal.BUY, self.price
             return Signal.WAITING_TO_BUY, self.price
         
         # condition to sell 
-        elif self.to_buy and not self.to_sell and self.waiting_for_sell:
-            if (data["High"].iloc[self.CURRENT_OHLC - 2] >= self.price * 1.10) or \
-                    (data["Low"].iloc[self.CURRENT_OHLC - 2] <= self.price * 0.95):
+        elif self.to_buy and not self.to_sell and self.waiting_for_sell \
+            and self.trade_details['index'] == token:
+            if (data["High"].iloc[-1] >= self.price * 1.10) or \
+                    (data["Low"].iloc[-1] <= self.price * 0.95):
+                
                 self.to_sell = True
                 self.waiting_for_buy = True
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-
+                print("TRADE SOLD", self.trade_details)
                 return Signal.SELL, self.price
             return Signal.WAITING_TO_SELL, self.price
 
@@ -176,122 +185,11 @@ class MaxMinOfLastTwo(IndicatorInterface):
         
         else:
             self.waiting_for_buy = True
+            self.trade_details['done'] = False
+            self.trade_details['index'] = None
             return Signal.WAITING_TO_BUY, self.price
             
-    # first simple strategy
-    # def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
-    #     current_open = data["Open"].iloc[self.CURRENT_OHLC]
-    #     last_third_open = data["Open"].iloc[self.CURRENT_OHLC - 2]
-    #     print("LATEST/LAST CANDLE OPEN", f"{current_open} ** {last_third_open}")
-
-    #     # condition to buy
-    #     if not self.to_buy:
-    #         if current_open >= (last_third_open + (last_third_open * 0.01)):
-    #             self.to_buy = True
-    #             self.waiting_for_sell = True
-
-    #             self.to_sell = False
-    #             self.waiting_for_buy = False
-    #             self.price = current_open
-    #             return Signal.BUY, self.price
-    #         return Signal.WAITING_TO_BUY, self.price
-        
-    #     # condition to sell 
-    #     elif self.to_buy and not self.to_sell and self.waiting_for_sell:
-    #         if (data["High"].iloc[self.CURRENT_OHLC - 2] >= self.price * 1.10) or \
-    #                 (data["Low"].iloc[self.CURRENT_OHLC - 2] <= self.price * 0.95):
-    #             self.to_sell = True
-    #             self.waiting_for_buy = True
-
-    #             self.to_buy = False
-    #             self.waiting_for_sell = False
-
-    #             return Signal.SELL, self.price
-    #         return Signal.WAITING_TO_SELL, self.price
-
-    #     elif not self.to_sell and self.to_buy and not self.waiting_for_buy:
-    #         self.waiting_for_sell = True
-    #         return Signal.WAITING_TO_SELL, self.price
-        
-    #     else:
-    #         self.waiting_for_buy = True
-    #         return Signal.WAITING_TO_BUY, self.price
-            
-    # def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
-    #     print("Index: ", index)
-    #     print("Data: ", data.iloc[self.CURRENT_OHLC])
-    #     if index == 2:
-    #         previous_max_high = max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
-    #         new_high = previous_max_high * self.DOUBLE_HIGH_MULTIPLIER
-
-    #         self.to_buy = False
-    #         self.to_sell = False
-    #         self.waiting_for_buy = True
-    #         self.bought_price = new_high
-    #         return Signal.WAITING_TO_BUY, self.bought_price
-    #     if index > 2:
-    #         if not self.to_buy and not self.to_sell and self.waiting_for_buy:
-    #             if data["High"].iloc[self.CURRENT_OHLC] > self.bought_price:
-    #                 self.to_buy = False
-    #                 self.to_sell = True
-    #                 self.waiting_for_buy = False
-    #                 return Signal.SELL, self.bought_price
-
-    #             if self.waiting_for_buy:
-    #                 previous_max_high = (
-    #                     max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
-    #                     * self.DOUBLE_HIGH_MULTIPLIER
-    #                 )
-    #                 previous_high = (data["High"].iloc[self.LAST_OHLC]) * self.SINGLE_HIGH_MULTIPLIER
-    #                 new_high = min(previous_max_high, previous_high)
-    #                 if new_high != self.bought_price:
-    #                     self.bought_price = new_high
-    #                     return Signal.WAITING_TO_BUY, self.bought_price
-
-    #         elif not self.to_buy and self.to_sell:
-    #             last_two_low = []
-    #             last_two_low.append(data["Low"].iloc[self.SECOND_LAST_OHLC])
-    #             last_two_low.append(data["Low"].iloc[self.LAST_OHLC])
-    #             min_last_two_low = self.DOUBLE_LOW_MULTIPLIER * min(last_two_low)
-    #             previous_low = (data["Low"].iloc[self.LAST_OHLC]) * self.SINGLE_LOW_MULTIPLIER
-    #             new_low = max(min_last_two_low, previous_low)
-    #             self.sold_price = new_low
-    #             self.to_buy = False
-    #             self.to_sell = False
-    #             self.waiting_for_sell = True
-    #             return Signal.WAITING_TO_SELL, self.sold_price
-
-    #         elif not self.to_buy and not self.to_sell and self.waiting_for_sell:
-    #             if data["Low"].iloc[self.CURRENT_OHLC] < self.sold_price:
-    #                 self.trades_count += 1
-    #                 self.to_buy = True
-    #                 self.to_sell = False
-    #                 self.waiting_for_sell = False
-    #                 return Signal.BUY, self.sold_price
-    #             if self.waiting_for_sell:
-    #                 last_two_low = []
-    #                 last_two_low.append(data["Low"].iloc[self.SECOND_LAST_OHLC])
-    #                 last_two_low.append(data["Low"].iloc[self.LAST_OHLC])
-    #                 min_last_two_low = self.DOUBLE_LOW_MULTIPLIER * min(last_two_low)
-    #                 previous_low = (data["Low"].iloc[self.LAST_OHLC]) * self.SINGLE_LOW_MULTIPLIER
-    #                 new_low = max(min_last_two_low, previous_low)
-    #                 if new_low != self.sold_price:
-    #                     self.sold_price = new_low
-    #                     return Signal.WAITING_TO_SELL, self.sold_price
-
-    #         elif self.to_buy and not self.to_sell:
-    #             previous_max_high = max(data["High"].iloc[self.LAST_OHLC], data["High"].iloc[self.SECOND_LAST_OHLC])
-    #             new_high = previous_max_high * self.DOUBLE_HIGH_MULTIPLIER
-    #             self.to_buy = False
-    #             self.to_sell = False
-    #             self.waiting_for_buy = True
-    #             self.bought_price = new_high
-    #             return Signal.WAITING_TO_BUY, self.bought_price
-
-    #     return None, None
-
-
-
+  
 class BaseStrategy:
     def __init__(
         self,
@@ -312,11 +210,12 @@ class BaseStrategy:
         nfo_tokens = [Token(instrument.exch_seg, instrument.token) for instrument in self.instruments]
         data = {token: self.data_provider.fetch_candle_data(token) for token in nfo_tokens}
         for token, token_data in data.items():
-            signal, price = self.indicator.check_indicators(token_data, index)
+            signal, price = self.indicator.check_indicators(token_data, token,  index)
             print("_" * 10)
             print("Signal: ", signal)
             print("Price: ", price)
             print("Data: ", token_data.iloc[index])
+            print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
 
@@ -336,11 +235,6 @@ NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/Ope
 OPT_TYPE = "OPTIDX"
 EXCH_TYPE = "NFO"
 
-API_KEY = None
-CLIENT_CODE = None
-PASSWORD = None
-TOKEN_CODE = None
-
 API_KEY = "T4MHVpXH"
 CLIENT_CODE = "J263557"
 PASSWORD = "7753"
@@ -356,12 +250,12 @@ data = \
     smart.generateSession(
     clientCode=client_code,
     password=password,
-    totp=pyotp.TOTP(token_code).now(),
+    totp=pyotp.TOTP(token_code).now()
 )
 auth_token = data["data"]["jwtToken"]
-feed_token = smart.getfeedToken()
+feed_token = smart.getfeedToken() 
 
-instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, ["BANKNIFTY06MAR2447000CE"])
+instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, ["FINNIFTY09APR2421500PE", "BANKNIFTY10APR2448200CE"])
 smart_api_provider = SmartApiDataProvider(smart)
 max_transactions_indicator = MaxMinOfLastTwo()
 strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator)

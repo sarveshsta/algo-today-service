@@ -16,7 +16,6 @@ class User:
 
     @property
     def user_id(self) -> str:
-        return self.__ID
 
     @property
     def password(self) -> str:

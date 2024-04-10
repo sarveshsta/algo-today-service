@@ -6,10 +6,14 @@ class PubSubClient:
     pubsub = None
 
     def create_connection(self, host, port, password):
-        self.client = aioredis.Redis.from_url(
-            f"redis://{host}:{port}/", encoding="utf-8", decode_responses=True, password=password
-        )
-        return self.client
+        try:
+            self.client = aioredis.Redis.from_url(
+                f"redis://{host}:{port}/", encoding="utf-8", decode_responses=True, password=password
+            )
+            return self.client
+        except Exception as e:
+            print("The error", e)
+            return None
 
     def get_client(self):
         return self.client
