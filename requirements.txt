@@ -8,3 +8,7 @@ redis==4.6.*
 email-validator==2.1
 
 -r trades/requirements.txt
+
+
+
+
