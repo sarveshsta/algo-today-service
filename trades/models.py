@@ -3,6 +3,11 @@ from datetime import datetime
 from sqlalchemy import Column, Date, String
 from sqlalchemy.orm import declarative_base
 
+from datetime import datetime
+from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
+from sqlalchemy.sql.sqltypes import Enum
+from sqlalchemy.ext.declarative import declarative_base
+
 from core.mixins import CoreBaseModel
 
 Base = declarative_base()
@@ -28,3 +33,14 @@ class TokenModel(CoreBaseModel, Base):
     @expiry.setter
     def expiry(self, value) -> None:
         self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
+
+
+class TradeDetails(CoreBaseModel, Base):
+    __tablename__ = "trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token = Column(String, ForeignKey("tokens.token"), nullable=False)
+    signal = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    trade_time = Column(DateTime, default=datetime.now())
+
