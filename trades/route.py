@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from config.database.config import get_db
 from trades.managers import *
-from trades.schema import TokenSchema, ExpirySchema
+from trades.schema import ExpirySchema, TokenSchema
 
 router = fastapi.APIRouter()
 
@@ -30,12 +30,6 @@ def create_index_tokens(db: Session = Depends(get_db)):
     return JSONResponse({"success": True}, status_code=201)
 
 
-# @router.get('/{symbol}', response_model=TokenSchema)
-# async def retrieve_token_by_symbol(symbol: str, db: Session = Depends(get_db)):
-#     print("SYMBOL", symbol)
-#     return retrieve_token(symbol, db)
-
-
 @router.get('/{index}', response_model=List[ExpirySchema])
 async def get_index_expiry(index:str, db: Session = Depends(get_db)):
     response = retrieve_expiry(index, db)
@@ -48,3 +42,16 @@ async def get_index_strike_price(index:str, expiry: str,  db: Session = Depends(
     response = retrieve_strike_price(index, expiry, db)
     if not response:  return JSONResponse({"success": False, "data":response}, status_code=404)
     return JSONResponse({"success": True, "data":response}, status_code=200)
+
+
+# from .strategy import BaseStrategy, max_transactions_indicator, instrument_reader, smart_api_provider
+@router.get('/trades')
+def get_trade_details(db: Session = Depends(get_db)):
+    return JSONResponse({"success":True})
+    # try: 
+    #     signal = 10
+    #     price = 100
+    #     # signal, price = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator).start_strategy()
+    #     return JSONResponse({"success": True, "data":{"signal": signal, "price": price}}, status_code=200)
+    # except Exception as e:
+    #     return JSONResponse({"success": False, "error": str(e)}, status_code=400)

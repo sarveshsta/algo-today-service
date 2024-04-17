@@ -1,4 +1,8 @@
-import threading, time
+import threading
+import time, os
+import sys
+import os
+
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
@@ -12,6 +16,19 @@ import requests
 from SmartApi import SmartConnect
 from datetime import datetime
 
+from trades.models import TradeDetails, TokenModel
+from trades.models import Base
+
+# Create a session factory
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from config.constants import DATABASE_URI
+
+SQLALCHEMY_DATABASE_URL = DATABASE_URI
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={}, future=True)
+SessionLocal = sessionmaker(bind=engine)
 
 class CandleDuration(Enum):
     ONE_MINUTE = "ONE_MINUTE"
@@ -204,51 +221,125 @@ class MaxMinOfLastTwo(IndicatorInterface):
             return Signal.WAITING_TO_BUY, self.price
             
   
+# class BaseStrategy:
+#     def __init__(
+#         self,
+#         instrument_reader: InstrumentReaderInterface,
+#         data_provider: DataProviderInterface,
+#         indicator: IndicatorInterface,
+#     ):
+#         self.instruments = instrument_reader.read_instruments()
+#         self.data_provider = data_provider
+#         self.indicator = indicator# Initialize self.price and load trade details from database
+#         self._load_trade_details_from_db()
+
+#     def signal(self, direction: str):
+#         # Placeholder method to send signals to the event bus
+#         print(f"Sending {direction} signal to event bus")
+
+#     def process_data(self, index: int):
+#         # Fetch data for all tokens
+#         nfo_tokens = [Token(instrument.exch_seg, instrument.token) for instrument in self.instruments]
+#         data = {token: self.data_provider.fetch_candle_data(token) for token in nfo_tokens}
+#         for token, token_data in data.items():
+#             signal, price = self.indicator.check_indicators(token_data, token,  index)
+#             print("_" * 10)
+#             print("Signal: ", signal)
+#             print("Price: ", price)
+#             print("Data: ", token_data.iloc[index])
+#             print("Token: ", token)
+#             print("Time: ", token_data.iloc[index]["timestamp"])
+#             print("_" * 10)
+
+#     def start_strategy(self):
+#         index = 0
+#         # Start the data processing thread
+#         self.data_processing_thread = threading.Thread(target=self.process_data, args=(index,))
+#         self.data_processing_thread.start()
+#         # Start a loop to periodically call self.process_data
+#         while True:
+#             self.process_data(index)
+#             time.sleep(50)
+#             if not index > 3: 
+#                 index += 1
+#                 print("INDEX VALUE UPDATED", index)
+#             else: index = index
+
+
 class BaseStrategy:
-    def __init__(
-        self,
-        instrument_reader: InstrumentReaderInterface,
-        data_provider: DataProviderInterface,
-        indicator: IndicatorInterface,
-    ):
+    def __init__(self, instrument_reader, data_provider, indicator):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
-        self.indicator = indicator# Initialize self.price and load trade details from database
+        self.indicator = indicator
 
-    def signal(self, direction: str):
-        # Placeholder method to send signals to the event bus
-        print(f"Sending {direction} signal to event bus")
+        # Initialize self.price and load trade details from database
+        self._load_trade_details_from_db()
 
-    def process_data(self, index: int):
-        # Fetch data for all tokens
+    def _load_trade_details_from_db(self):
+        """Load trade details from the database."""
+        session = SessionLocal()
+        try:
+            # Query the unsold trade
+            unsold_trade = session.query(TradeDetails).filter(TradeDetails.signal == 'BUY').first()
+            if unsold_trade:
+                self.price = unsold_trade.price
+        finally:
+            session.close()
+
+    def process_data(self, index):
+        """Process data for all tokens."""
         nfo_tokens = [Token(instrument.exch_seg, instrument.token) for instrument in self.instruments]
         data = {token: self.data_provider.fetch_candle_data(token) for token in nfo_tokens}
-        for token, token_data in data.items():
-            signal, price = self.indicator.check_indicators(token_data, token,  index)
-            print("_" * 10)
-            print("Signal: ", signal)
-            print("Price: ", price)
-            print("Data: ", token_data.iloc[index])
-            print("Token: ", token)
-            print("Time: ", token_data.iloc[index]["timestamp"])
-            print("_" * 10)
-            return signal, price
+
+        session = SessionLocal()
+        try:
+            for token, token_data in data.items():
+                signal, price = self.indicator.check_indicators(token_data, token, index)
+                print("Signal: ", signal)
+                print("Price: ", price)
+                print("Data: ", token_data.iloc[index])
+                print("Token: ", token)
+                print("Time: ", token_data.iloc[index]["timestamp"])
+
+                # Handle signals
+                if signal == Signal.BUY:
+                    # Save trade details for BUY signal
+                    new_trade = TradeDetails(
+                        token=str(token),
+                        signal='BUY',
+                        price=price,
+                        trade_time=datetime.now()
+                    )
+                    session.add(new_trade)
+                    session.commit()
+                    print("Saved in the DB")
+                    self.price = price  # Update self.price
+
+                elif signal == Signal.SELL:
+                    # Fetch the existing BUY trade to update
+                    unsold_trade = session.query(TradeDetails).filter(TradeDetails.signal == 'BUY').first()
+                    if unsold_trade:
+                        # Update the trade signal to SELL and set the sell price
+                        unsold_trade.signal = 'SELL'
+                        unsold_trade.price = price
+                        session.commit()
+                        print("Saved in the DB")
+                else:
+                    continue
+        finally:
+            session.close()
 
     def start_strategy(self):
+        """Start the strategy in a loop."""
         index = 0
-        # Start the data processing thread
-        self.data_processing_thread = threading.Thread(target=self.process_data, args=(index,))
-        self.data_processing_thread.start()
-        # Start a loop to periodically call self.process_data
         while True:
-            signal, price = self.process_data(index)
-            print("SIGNAL AND PRICE RETURNED are", signal, price)
+            self.process_data(index)
             time.sleep(50)
-            if not index > 3: 
+            if not index > 3:
                 index += 1
                 print("INDEX VALUE UPDATED", index)
-            else: index = index
-            return signal, price
+            else:
+                index = index
 
 
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -279,5 +370,5 @@ feed_token = smart.getfeedToken()
 instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, ["FINNIFTY16APR2421800CE", "BANKNIFTY16APR2447500CE"])
 smart_api_provider = SmartApiDataProvider(smart)
 max_transactions_indicator = MaxMinOfLastTwo()
-# strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator)
-# strategy.start_strategy()
+strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator)
+strategy.start_strategy()
