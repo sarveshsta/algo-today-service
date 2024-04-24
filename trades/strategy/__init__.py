@@ -13,9 +13,19 @@ from SmartApi import SmartConnect
 from datetime import datetime
 
 
-# variables initialisation start 
-indexes_list = ["MIDCPNIFTY22APR2410650PE", "NIFTY25APR2422200CE"]
-number_of_candles = 0
+class CandleDuration(Enum):
+    ONE_MINUTE = "ONE_MINUTE"
+    THREE_MINUTE = "THREE_MINUTE"
+    FOUR_MINUTE = "FOUR_MINUTE"
+    FIVE_MINUTE = "FIVE_MINUTE"
+    TEN_MINUTE = "TEN_MINUTE"
+
+# variables initialisation start
+indexes_list = ["MIDCPNIFTY29APR2410700PE", "NIFTY25APR2422200CE"]
+index_candle_durations = {
+    "MIDCPNIFTY22APR2410725PE": CandleDuration.ONE_MINUTE,
+    "NIFTY25APR2422200CE": CandleDuration.THREE_MINUTE
+}
 
 # price comparision
 OHLC_1 =  "Close"
@@ -35,17 +45,8 @@ selling_OHLC1_multiplier = 1.10
 
 selling_OHLC2 = "Low"
 selling_OHLC2_multiplier = 0.95
-
-
 # variables initialisation complete
 
-
-class CandleDuration(Enum):
-    ONE_MINUTE = "ONE_MINUTE"
-    THREE_MINUTE = "THREE_MINUTE"
-    FOUR_MINUTE = "FOUR_MINUTE"
-    FIVE_MINUTE = "FIVE_MINUTE"
-    TEN_MINUTE = "TEN_MINUTE"
 
 class Signal(Enum):
     BUY = 1
@@ -115,10 +116,11 @@ class DataProviderInterface:
         raise NotImplementedError("Subclasses must implement fetch_candle_data()")
 
 class SmartApiDataProvider(DataProviderInterface):
-    def __init__(self, smart: SmartConnect):
+    def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
         self.__smart = smart
+        self.__ltpSmart = ltpSmart
 
-    def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE") -> pd.DataFrame:
+    def fetch_candle_data(self, token, interval) -> pd.DataFrame:
         to_date = datetime.now()
         from_date = to_date - timedelta(minutes=5)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
@@ -134,9 +136,13 @@ class SmartApiDataProvider(DataProviderInterface):
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         data = pd.DataFrame(res_json["data"], columns=columns)
 
-        ltp_data = self.__smart.ltpData("NFO", token.symbol, token.token_id)
+        ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
         data['LTP'] = float(ltp_data['data']['ltp'])      
         return data
+    
+    def fetch_ltp_data(self, token):
+        ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
+        return float(ltp_data['data']['ltp'])    
 
 class IndicatorInterface:
     def check_indicators(self, data: pd.DataFrame) -> List[str]:
@@ -147,32 +153,59 @@ class MaxMinOfLastTwo(IndicatorInterface):
     to_buy = False
     to_sell = False
     waiting_for_sell = False
-    waiting_for_buy = False
+    waiting_for_buy = True
     price = 0
+    number_of_candles = 3
     trade_details = {"done":False,"index":None,'datetime':datetime.now(),"price":price,'type':None}
 
     def check_indicators(self, data: pd.DataFrame, token:str,  index: int = 0) -> tuple[Signal, float]:
         ltp_price = float(data['LTP'][0])
-        token = token.split(':')[-1]
+        token = str(token).split(':')[-1]
         print("TOKEN", token)
+        print("DATA:", data)
+        if self.trade_details['index'] == None or self.waiting_for_buy==True:
+            if self.number_of_candles > len(data): self.number_of_candles= len(data) - 1 
+            print("NUMBER OF CANDLES", self.number_of_candles)
+            print("DATA length", len(data))
 
-        if self.trade_details['index'] == None or self.waiting_for_buy:
-            if number_of_candles > len(data): number_of_candles= len(data)
-            for i in range(number_of_candles, 0, -1):
+            for i in range(len(data) - 1, 0, -1):
             # for i in range(len(data)-1, 0, -1):
                 current_candle = data.iloc[i]
                 previous_candle = data.iloc[i - 1]
+
                 print(f'C{i} => {current_candle[OHLC_1]} H{i-1} => {previous_candle[OHLC_2]}')
+
                 if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
+                    high_values = [data.iloc[j][OHLC_2] for j in range(i, len(data)-1)]
+                    # Find the maximum high value
+                    max_high = max(high_values)
+                    # Update self.price with the maximum high value
+                    self.price = max_high
+
                     self.price = current_candle[OHLC_2]
                     self.trade_details['index'] = token
                     self.trade_details['price'] = self.price
                     print("Condition matched", self.price)
                     break
 
-        current_high = data[buying_OHLC].iloc[-1]
+        current_high = data[buying_OHLC].iloc[-2]
+
         if not self.to_buy and token == self.trade_details['index']:
-            if self.price >= current_high * buying_multiplier:
+            if ltp_price > self.price * buying_multiplier:
+                self.to_buy = True
+                self.waiting_for_sell = True
+
+                self.to_sell = False
+                self.waiting_for_buy = False
+                self.price = current_high
+                self.trade_details['done'] = True
+                self.trade_details['index'] = str(token)
+                self.trade_details['datetime'] = datetime.now()
+                self.trade_details = {"done": False, "index": None, 'datetime': datetime.now()}
+                print("TRADE BOUGHT in",token, self.trade_details)
+                return Signal.BUY, self.price
+                
+            elif self.price >= current_high * buying_multiplier:
                 self.to_buy = True
                 self.waiting_for_sell = True
 
@@ -220,6 +253,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.trade_details['index'] = None
                 print("TRADE SOLD", self.trade_details)
                 return Signal.SELL, self.price 
+            
             elif (data[selling_OHLC2].iloc[-1] <= self.price * selling_OHLC2_multiplier):
                 
                 self.to_sell = True
@@ -247,7 +281,6 @@ class MaxMinOfLastTwo(IndicatorInterface):
             self.trade_details['index'] = None
             print("TRADE DETAILS", self.trade_details)
             return Signal.WAITING_TO_BUY, self.price
-
   
 class BaseStrategy:
     def __init__(
@@ -255,19 +288,23 @@ class BaseStrategy:
         instrument_reader: InstrumentReaderInterface,
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
+        index_candle_durations: dict[str, CandleDuration]
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
         self.indicator = indicator # Initialize self.price and load trade details from database
+        self.index_candle_durations = index_candle_durations
 
     def signal(self, direction: str):
         print(f"Sending {direction} signal to event bus")
 
     def process_data(self, index: int):
-        self.nfo_tokens = [Token(instrument.exch_seg, instrument.token, instrument.symbol) for instrument in self.instruments]
-        self.data = {token: self.data_provider.fetch_candle_data(token) for token in self.nfo_tokens}
-        for token, token_data in self.data.items():
-            signal, price = self.indicator.check_indicators(token_data, token,  index)
+        for instrument in self.instruments:
+            token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+            candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.ONE_MINUTE)
+            token_data = self.data_provider.fetch_candle_data(token, interval=candle_duration.value)
+            ltp = self.data_provider.fetch_ltp_data(token)
+            signal, price = self.indicator.check_indicators(token_data, token, index)
             print("_" * 10)
             print("Signal: ", signal)
             print("Price: ", price)
@@ -275,42 +312,39 @@ class BaseStrategy:
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
+            time.sleep(3)
+        # self.nfo_tokens = [Token(instrument.exch_seg, instrument.token, instrument.symbol) for instrument in self.instruments]
+        # self.data = {token: self.data_provider.fetch_candle_data(token) for token in self.nfo_tokens}
+        # for token, token_data in self.data.items():
+        #     signal, price = self.indicator.check_indicators(token_data, token,  index)
+        #     print("_" * 10)
+        #     print("Signal: ", signal)
+        #     print("Price: ", price)
+        #     print("Data: ", token_data.iloc[index])
+        #     print("Token: ", token)
+        #     print("Time: ", token_data.iloc[index]["timestamp"])
+        #     print("_" * 10)
         
 
-    # def continuously_fetch_ltp_data(self, interval: int = 1):
-    #     self.nfo_tokens = [Token(instrument.exch_seg, instrument.token, instrument.symbol) for instrument in self.instruments]
-    #     self.data = {token: self.data_provider.fetch_candle_data(token) for token in self.nfo_tokens}
-    #     for token, token_data in self.data.items():
-    #         signal, price = self.indicator.check_indicators(token_data, token,  index)
-    #         # print("_" * 10)
-    #         # print("Signal: ", signal)
-    #         # print("Price: ", price)
-    #         # print("Data: ", token_data.iloc[index])
-    #         # print("Token: ", token)
-    #         # print("Time: ", token_data.iloc[index]["timestamp"])
-    #         # print("_" * 10)
-    #     while True:
-    #         for instrument in self.instruments:
-    #             token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-    #             ltp_data = self.data_provider.fetch_ltp_data(token, instrument.symbol)
-    #             # print("LTP DATA THAT IS RETURNED", ltp_data)
-    #             candle_data = self.data_provider.fetch_candle_data(token)
-                
-    #             signal, price = self.indicator.check_indicators(candle_data, ltp_data)
-                
-    #             print(f"Signal: {signal}, Price: {price}, LTP: {ltp_data}")
+    def continuously_fetch_ltp_data(self):
+        while True:
+            for instrument in self.instruments:
+                token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+                ltp = self.data_provider.fetch_ltp_data(token)  # Fetch LTP
+                print(f"LTP for {instrument.symbol}: {ltp}")
             
-    #         time.sleep(interval)
+            time.sleep(3)
 
     def start_strategy(self):
-        index = 0
-        # threading.Timer(3, self.process_data, args=(index,)).start()
+        index = -1
+        threading.Thread(target=self.continuously_fetch_ltp_data, args=()).start()
         self.data_processing_thread = threading.Thread(target=self.process_data, args=(index))
+        # threading.Timer(3, self.process_data, args=(index,)).start()
         
         while True:
             self.process_data(index)
             time.sleep(50)
-            if not index > 3: 
+            if not index > 2: 
                 index += 1
             else: index = index
 
@@ -323,25 +357,37 @@ API_KEY = "T4MHVpXH"
 CLIENT_CODE = "J263557"
 PASSWORD = "7753"
 TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+LTP_API_KEY = "FJrreQAW"
 
 api_key = API_KEY
 token_code = TOKEN_CODE
 client_code = CLIENT_CODE
 password = PASSWORD
+ltp_api_key = LTP_API_KEY
+
 
 smart = SmartConnect(api_key=api_key)
-data = \
-    smart.generateSession(
+ltp_smart = SmartConnect(api_key=api_key)
+
+data = smart.generateSession(
     clientCode=client_code,
     password=password,
     totp=pyotp.TOTP(token_code).now()
 )
-try: auth_token = data["data"]["jwtToken"]
+ltp_data = ltp_smart.generateSession(
+    clientCode=client_code,
+    password=password,
+    totp=pyotp.TOTP(token_code).now()
+)
+try: 
+    auth_token = data["data"]["jwtToken"]
+    auth_token = ltp_data["data"]["jwtToken"]
 except: print("Access denied, exceeding access rate")
+
 feed_token = smart.getfeedToken() 
 
 instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, indexes_list)
-smart_api_provider = SmartApiDataProvider(smart)
+smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
 max_transactions_indicator = MaxMinOfLastTwo()
-strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator)
+strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_candle_durations)
 strategy.start_strategy()
