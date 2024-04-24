@@ -21,10 +21,10 @@ class CandleDuration(Enum):
     TEN_MINUTE = "TEN_MINUTE"
 
 # variables initialisation start
-indexes_list = ["MIDCPNIFTY29APR2410700PE", "NIFTY25APR2422200CE"]
+indexes_list = ["MIDCPNIFTY29APR2410875PE", "NIFTY25APR2422400CE"]
 index_candle_durations = {
-    "MIDCPNIFTY22APR2410725PE": CandleDuration.ONE_MINUTE,
-    "NIFTY25APR2422200CE": CandleDuration.THREE_MINUTE
+    indexes_list[0]: CandleDuration.ONE_MINUTE,
+    indexes_list[1]: CandleDuration.ONE_MINUTE
 }
 
 # price comparision
@@ -37,7 +37,7 @@ buying_OHLC = "High"
 
 # selling condition comparision
 trail_ltp_multiplier = 1.12
-price_vs_ltp_mulitplier = 1.10
+price_vs_ltp_mulitplier = 0.95
 
 # stop loss condition
 selling_OHLC1 = "High"
@@ -155,20 +155,21 @@ class MaxMinOfLastTwo(IndicatorInterface):
     waiting_for_sell = False
     waiting_for_buy = True
     price = 0
+    trading_price = 0
     number_of_candles = 3
-    trade_details = {"done":False,"index":None,'datetime':datetime.now(),"price":price,'type':None}
+    trade_details = {"done":False,"index":None,'datetime':datetime.now()}
 
     def check_indicators(self, data: pd.DataFrame, token:str,  index: int = 0) -> tuple[Signal, float]:
         ltp_price = float(data['LTP'][0])
         token = str(token).split(':')[-1]
         print("TOKEN", token)
         print("DATA:", data)
-        if self.trade_details['index'] == None or self.waiting_for_buy==True:
-            if self.number_of_candles > len(data): self.number_of_candles= len(data) - 1 
+        if self.waiting_for_buy == True:
+            if self.number_of_candles > len(data)-2: self.number_of_candles= len(data) - 2 
             print("NUMBER OF CANDLES", self.number_of_candles)
             print("DATA length", len(data))
 
-            for i in range(len(data) - 1, 0, -1):
+            for i in range(len(data) - 2, 0, -1):
             # for i in range(len(data)-1, 0, -1):
                 current_candle = data.iloc[i]
                 previous_candle = data.iloc[i - 1]
@@ -176,56 +177,71 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 print(f'C{i} => {current_candle[OHLC_1]} H{i-1} => {previous_candle[OHLC_2]}')
 
                 if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
-                    high_values = [data.iloc[j][OHLC_2] for j in range(i, len(data)-1)]
-                    # Find the maximum high value
-                    max_high = max(high_values)
-                    # Update self.price with the maximum high value
+                    if i < len(data) - 1:
+                        high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, len(data)-1)]
+                        max_high = max(high_values)
+                        print("HIGH VALUES", high_values)
+                    else: 
+                        high_values = [float(data.iloc[i][OHLC_2])]
+                        max_high = max(high_values)
+
+
                     self.price = max_high
+                    self.trading_price = max_high
 
                     self.price = current_candle[OHLC_2]
                     self.trade_details['index'] = token
-                    self.trade_details['price'] = self.price
                     print("Condition matched", self.price)
+                    print("INDEX DETAILS", self.trade_details)
                     break
 
         current_high = data[buying_OHLC].iloc[-2]
 
         if not self.to_buy and token == self.trade_details['index']:
-            if ltp_price > self.price * buying_multiplier:
+            if ltp_price > self.price:
                 self.to_buy = True
                 self.waiting_for_sell = True
 
                 self.to_sell = False
                 self.waiting_for_buy = False
-                self.price = current_high
+                self.price = ltp_price
                 self.trade_details['done'] = True
-                self.trade_details['index'] = str(token)
+                self.trade_details['index'] = token
                 self.trade_details['datetime'] = datetime.now()
-                self.trade_details = {"done": False, "index": None, 'datetime': datetime.now()}
-                print("TRADE BOUGHT in",token, self.trade_details)
+                print("PRE CONDITION PRICE", self.trading_price, "CURRENT LTP", ltp_price)
+                print("TRADE BOUGHT due to LTP>Price", self.trade_details)
                 return Signal.BUY, self.price
                 
-            elif self.price >= current_high * buying_multiplier:
-                self.to_buy = True
-                self.waiting_for_sell = True
+            # elif self.price >= current_high * buying_multiplier:
+            #     self.to_buy = True
+            #     self.waiting_for_sell = True
 
-                self.to_sell = False
-                self.waiting_for_buy = False
-                self.price = current_high
-                self.trade_details['done'] = True
-                self.trade_details['index'] = str(token)
-                self.trade_details['datetime'] = datetime.now()
-                self.trade_details = {"done": False, "index": None, 'datetime': datetime.now()}
-                print("TRADE BOUGHT in",token, self.trade_details)
-                return Signal.BUY, self.price
+            #     self.to_sell = False
+            #     self.waiting_for_buy = False
+            #     self.price = current_high
+            #     self.trade_details['done'] = True
+            #     self.trade_details['index'] = token
+            #     self.trade_details['datetime'] = datetime.now()
+            #     print("TRADE BOUGHT due to PRICE > Current high",self.price, current_high, self.trade_details)
+            #     return Signal.BUY, self.price
             return Signal.WAITING_TO_BUY, self.price
         
         elif self.to_buy and not self.to_sell and self.waiting_for_sell \
             and self.trade_details['index'] == token:
 
-            if ltp_price >= trail_ltp_multiplier * self.price:
-                print("TRADE DETAILS", self.trade_details)
-                return Signal.WAITING_TO_SELL, self.price
+            if ltp_price >= 1.10 * self.price:
+                self.to_sell = True
+                self.waiting_for_buy = True
+
+                self.to_buy = False
+                self.waiting_for_sell = False
+                print("LTP PRICE and Selling price", ltp_price, self.price)
+                self.price = ltp_price
+                self.trade_details['datetime'] = datetime.now()
+                self.trade_details['index'] = None
+                print("TRADE SOLD PROFIT LTP", self.trade_details)
+                return Signal.SELL, self.price
+                # return Signal.WAITING_TO_SELL, self.price
             
             elif ltp_price < self.price * price_vs_ltp_mulitplier:
                 self.to_sell = True
@@ -233,40 +249,40 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 self.to_buy = False
                 self.waiting_for_sell = False
+                print("LTP PRICE and Selling price", ltp_price, self.price)
                 self.price = ltp_price
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                self.trade_details['price'] = self.price
-                print("LTP PRICE and Selling price", ltp_price, self.price)
-                print("TRADE SOLD", token, self.trade_details)
+                print("TRADE SOLD LOSS LTP",self.trade_details)
                 return Signal.SELL, self.price
             
-            if (data[selling_OHLC1].iloc[-1] >= self.price * selling_OHLC1_multiplier):
+            elif (data[selling_OHLC1].iloc[-2] >= self.price * selling_OHLC1_multiplier):
                 self.to_sell = True
                 self.waiting_for_buy = True
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                self.price = data[selling_OHLC1].iloc[-1]
-                self.trade_details['price'] = self.price
+                print("LTP PRICE and Selling price", data[selling_OHLC1].iloc[-2], self.price)
+                self.price = data[selling_OHLC1].iloc[-2]
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                print("TRADE SOLD", self.trade_details)
+                print("TRADE SOLD PROFIT HIGH", self.trade_details)
                 return Signal.SELL, self.price 
             
-            elif (data[selling_OHLC2].iloc[-1] <= self.price * selling_OHLC2_multiplier):
+            elif (data[selling_OHLC2].iloc[-2] <= self.price * selling_OHLC2_multiplier):
                 
                 self.to_sell = True
                 self.waiting_for_buy = True
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                self.price = data[selling_OHLC2].iloc[-1]
-                self.trade_details['price'] = self.price
+                print("LTP PRICE and Selling price", data[selling_OHLC2].iloc[-2], self.price)
+
+                self.price = data[selling_OHLC2].iloc[-2]
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
                 print("Selling price", self.price)
-                print("TRADE SOLD", self.trade_details)
+                print("TRADE SOLD LOSS LOW", self.trade_details)
                 return Signal.SELL, self.price
             return Signal.WAITING_TO_SELL, self.price
         
@@ -278,7 +294,6 @@ class MaxMinOfLastTwo(IndicatorInterface):
         else:
             self.waiting_for_buy = True
             self.trade_details['done'] = False
-            self.trade_details['index'] = None
             print("TRADE DETAILS", self.trade_details)
             return Signal.WAITING_TO_BUY, self.price
   
@@ -312,7 +327,7 @@ class BaseStrategy:
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
-            time.sleep(3)
+            time.sleep(8)
         # self.nfo_tokens = [Token(instrument.exch_seg, instrument.token, instrument.symbol) for instrument in self.instruments]
         # self.data = {token: self.data_provider.fetch_candle_data(token) for token in self.nfo_tokens}
         # for token, token_data in self.data.items():
@@ -337,16 +352,16 @@ class BaseStrategy:
 
     def start_strategy(self):
         index = -1
-        threading.Thread(target=self.continuously_fetch_ltp_data, args=()).start()
-        self.data_processing_thread = threading.Thread(target=self.process_data, args=(index))
+        # threading.Thread(target=self.continuously_fetch_ltp_data, args=()).start()
+        threading.Thread(target=self.process_data, args=(index)).start()
         # threading.Timer(3, self.process_data, args=(index,)).start()
         
         while True:
             self.process_data(index)
-            time.sleep(50)
-            if not index > 2: 
-                index += 1
-            else: index = index
+            # time.sleep(50)
+            # if not index > 2: 
+            #     index += 1
+            # else: index = index
 
 
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -367,7 +382,7 @@ ltp_api_key = LTP_API_KEY
 
 
 smart = SmartConnect(api_key=api_key)
-ltp_smart = SmartConnect(api_key=api_key)
+ltp_smart = SmartConnect(api_key=ltp_api_key)
 
 data = smart.generateSession(
     clientCode=client_code,

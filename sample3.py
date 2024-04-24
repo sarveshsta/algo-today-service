@@ -1,23 +1,3 @@
-from SmartApi import SmartConnect
-API_KEY = "T4MHVpXH"
-CLIENT_CODE = "J263557"
-PASSWORD = "7753"
-TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-import pyotp
-
-token_code = TOKEN_CODE
-client_code = CLIENT_CODE
-password = PASSWORD
-
-ltp_smart = SmartConnect(api_key="FJrreQAW")
-data = ltp_smart.generateSession(
-    clientCode=client_code,
-    password=password,
-    totp=pyotp.TOTP(token_code).now()
-)
-print(data["data"]["jwtToken"])
-
-
 # import threading, time
 # from datetime import datetime, timedelta
 # from enum import Enum
