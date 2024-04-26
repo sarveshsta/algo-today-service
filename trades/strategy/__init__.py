@@ -337,7 +337,7 @@ class BaseStrategy:
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
-            time.sleep(15)        
+            time.sleep(18)        
 
     def continuously_fetch_ltp_data(self):
         while True:
