@@ -1,3 +1,5 @@
+TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 # import threading, time
 # from datetime import datetime, timedelta
 # from enum import Enum

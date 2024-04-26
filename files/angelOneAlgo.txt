@@ -1,0 +1,269 @@
+from SmartApi import SmartConnect
+import pyotp
+from apscheduler.schedulers.blocking import BlockingScheduler
+import time
+
+# Initialize the scheduler
+scheduler = BlockingScheduler()
+
+# Replace these with your actual credentials
+api_key = 'Your Api Key'
+clientId = 'Your Client Id'
+pwd = 'Your Pin'
+token = "--"
+# symbol = 'SBIN-EQ'  
+
+order_params = {
+        "variety": "NORMAL",
+        "tradingsymbol": "SBIN-EQ",
+        "symboltoken": "3045",
+        "exchange": "NSE",
+        "ordertype": "LIMIT",
+        "producttype": "INTRADAY",
+        "duration": "DAY",
+        "quantity": "1"
+    }
+
+historic_data_params = {
+        "exchange": "NSE",
+        "symboltoken": "3045",
+        "interval": "ONE_MINUTE",
+        "fromdate": "2021-02-08 09:00",
+        "todate": "2021-02-08 09:16"
+    }
+
+def login():
+    smartApi = SmartConnect(api_key)
+    totp = pyotp.TOTP(token).now()
+    data = smartApi.generateSession(clientId, pwd, totp)
+    authToken = data['data']['jwtToken']
+    refreshToken = data['data']['refreshToken']
+    return smartApi, refreshToken
+
+def get_candle_data(smartApi, historic_data_params):
+    try:
+        candle_data_response = smartApi.getCandleData(historic_data_params)
+        
+        if 'data' in candle_data_response and isinstance(candle_data_response['data'], list):
+            # Extract the candle data
+            candle_data = candle_data_response['data']
+            return candle_data
+        else:
+            print("Invalid response format")
+            return None
+    except Exception as e:
+        print("Get Candle Data failed: {}".format(e.message))
+        return None
+
+def get_last_two_candle_values(candle_data):
+    """Fetch the maximum 'high' and minimum 'low' values of the last two candles."""
+    if candle_data and len(candle_data) >= 2:
+        last_two_candles = candle_data[-2:]  # Get the last two candles
+        high_values = [candle[2] for candle in last_two_candles]  # Index 2 for 'high' value
+        low_values = [candle[3] for candle in last_two_candles]   # Index 3 for 'low' value
+        max_high = max(high_values)
+        min_low = min(low_values)
+        return max_high, min_low
+    else:
+        return None, None
+
+def place_order(smartApi, order_params, transaction_type, price):
+    try:
+        # Define the place order request parameters
+        place_order_request = {
+            "variety": "NORMAL",
+            "tradingsymbol": order_params["tradingsymbol"],
+            "symboltoken": order_params["symboltoken"],
+            "transactiontype": transaction_type,  # Use the provided transaction type
+            "exchange": order_params["exchange"],
+            "ordertype": "MARKET",  # Assuming this is a market order
+            "producttype": "INTRADAY",
+            "duration": "DAY",
+            "price": str(price),  # Use the provided price
+            "squareoff": "0",
+            "stoploss": "0",
+            "quantity": str(order_params["quantity"])  # Use the provided quantity
+        }
+        
+        # Call the placeOrder function with the request parameters
+        response = smartApi.placeOrder(place_order_request)
+        
+        # Check if the response indicates success
+        if response.get("status", False) and response.get("message", "") == "SUCCESS":
+            order_data = response.get("data", {})
+            order_id = order_data.get("orderid", "")
+            
+            if order_id:
+                print(f"Order placed successfully with Order ID: {order_id}")
+                return order_id
+        
+        print("Order placement failed. Response:", response)
+        return None
+    except Exception as e:
+        print("Order placement failed:", str(e))
+        return None
+
+def modify_order(smartApi, order_params, price):
+    try:
+        # Define the modify order request parameters
+        modify_order_request = {
+            "variety": "NORMAL",
+            "orderid": order_params["orderid"],
+            "ordertype": "LIMIT",  # Assuming this is a limit order
+            "producttype": "INTRADAY",
+            "duration": "DAY",
+            "price": str(price),  # Use the provided price
+            "quantity": str(order_params["quantity"])  # Use the existing quantity
+        }
+        
+        # Call the modifyOrder function with the request parameters
+        response = smartApi.modifyOrder(modify_order_request)  # Corrected API call
+        
+        # Check if the response indicates success
+        if response.get("status", False) and response.get("message", "") == "SUCCESS":
+            order_data = response.get("data", {})
+            order_id = order_data.get("orderid", "")
+            
+            if order_id:
+                print(f"Order modified successfully with new price: {price}")
+                return True
+        
+        print("Order modification failed. Response:", response)
+        return False
+    except Exception as e:
+        print("Order modification failed:", str(e))
+        return False
+
+def algo_trading_logic(smartApi, Buy, Sell, waiting_for_buy, waiting_for_sell, bought_price, sold_price, count, cum_profit):
+
+    try:
+        # First Condition
+        if Buy == False and Sell == False and waiting_for_buy == True:
+            # Check if the last value from get_candle_data is greater than bought_price
+            last_value = get_candle_data()[-1]  # Assuming get_candle_data returns a list of values
+            if last_value > bought_price:
+                print("Bought successfully at price:", bought_price)
+                Buy = False
+                Sell = True
+                waiting_for_buy = False
+
+            if waiting_for_buy == True:
+                new_H, l = get_last_two_candle_values()
+                if new_H != bought_price:
+                    # Modify the buy order with new_H
+                    if modify_order(smartApi, order_params, new_H):
+                        bought_price = new_H
+                        print("Order modified - New price for buy:", bought_price)
+
+        # Next Condition
+        elif Buy == False and Sell == True:
+            h, mini = get_last_two_candle_values()
+            print("Sell at price:", mini)
+            # Place a sell order at mini price
+            order_id = place_order(smartApi, order_params, "SELL", mini)
+            if order_id:
+                sold_price = mini
+                Buy = False
+                Sell = False
+                waiting_for_sell = True
+
+        # Next Condition
+        elif Buy == False and Sell == False and waiting_for_sell == True:
+            last_low_value = get_candle_data()[-1]  # Assuming get_candle_data returns a list of values
+            if last_low_value < sold_price:
+                print("Sold successfully at price:", sold_price)
+                Sell = False
+                Buy = True
+                waiting_for_sell = False
+                count += 1
+                print("No. of transactions:", count)
+                cum_profit += (sold_price - bought_price)
+                print("Cumulative Profit:", cum_profit)
+
+            if waiting_for_sell == True:
+                new_H, new_L = get_last_two_candle_values()
+                if new_L != sold_price:
+                    # Modify the sell order with new_L
+                    if modify_order(smartApi, order_params, new_L):
+                        sold_price = new_L
+                        print("Order modified - New price for sell:", sold_price)
+
+        # Next Condition
+        elif Buy == True and Sell == False:
+            new_H, l = get_last_two_candle_values()
+            print("Buy at price:", new_H)
+            # Place a buy order at new_H price
+            order_id = place_order(smartApi, order_params, "BUY", new_H)
+            if order_id:
+                Buy = False
+                Sell = False
+                waiting_for_buy = True
+                bought_price = new_H
+
+        # Else Condition (If none of the above conditions are met)
+        else:
+            # Handle any additional logic here
+            print("Something went wrong in this program")
+            return
+
+    except Exception as e:
+        print("Error during trading logic:", str(e))
+
+def logout(smartApi):
+    try:
+        logout_response = smartApi.terminateSession(clientId)
+        print("Logout Successful")
+
+        # Check if the logout was successful
+        if logout_response.get("status") is True:
+            print("Logout Successful")
+        else:
+            print("Logout Failed:", logout_response.get("message"))
+
+    except Exception as e:
+        print("Error during logout:", str(e))
+
+
+# Define the job to run algo_trading_logic every 30 seconds
+@scheduler.scheduled_job("interval", seconds=30, start_date="2023-08-21 09:15:00", end_date="2023-08-21 15:15:00")
+def run_trading_logic():
+    # Initialize your Buy, Sell, waiting_for_buy, waiting_for_sell, bought_price, sold_price, count, cum_profit variables here
+    Buy = True
+    Sell = False
+    waiting_for_buy = False
+    waiting_for_sell = False
+    bought_price = 0.0
+    sold_price = 0.0
+    count = 0
+    cum_profit = 0.0
+
+    # Call your trading logic function
+    Buy, Sell, waiting_for_buy, waiting_for_sell, bought_price, sold_price, count, cum_profit, _ = algo_trading_logic(
+        Buy, Sell, waiting_for_buy, waiting_for_sell, bought_price, sold_price, count, cum_profit
+    )
+    logout(api_key, clientId)
+
+if __name__ == "__main__":
+    # Start the scheduler
+    smartApi, refreshToken = login()
+
+    candle_data = get_candle_data(smartApi, historic_data_params)
+    
+    if candle_data:
+        # Process the candle data here
+        for candle in candle_data:
+            timestamp, open_price, high_price, low_price, close_price, volume = candle
+            print(f"Timestamp: {timestamp}, Open: {open_price}, High: {high_price}, Low: {low_price}, Close: {close_price}, Volume: {volume}")
+
+        max_high_candle, min_low_candle = get_last_two_candle_values(candle_data)
+        print(f"Maximum High (Candle Data): {max_high_candle}, Minimum Low (Candle Data): {min_low_candle}")
+
+    scheduler.start()
+
+    try:
+        while True:
+            time.sleep(2)
+    except (KeyboardInterrupt, SystemExit):
+        # Shutdown the scheduler gracefully when needed
+        scheduler.shutdown()
+

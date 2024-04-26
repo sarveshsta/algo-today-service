@@ -12,19 +12,24 @@ import requests
 from SmartApi import SmartConnect
 from datetime import datetime
 
+def write_logs(type, index, price, status, reason):
+    with open('trade/logs.txt', 'w+') as f:
+        f.write(f'Trade {type} in {index} at {price} with {status}, reason {reason} at {datetime.now()}')
+        f.close()
+    print("LOGS WRITTEN")
 
 class CandleDuration(Enum):
     ONE_MINUTE = "ONE_MINUTE"
     THREE_MINUTE = "THREE_MINUTE"
-    FOUR_MINUTE = "FOUR_MINUTE"
     FIVE_MINUTE = "FIVE_MINUTE"
     TEN_MINUTE = "TEN_MINUTE"
 
 # variables initialisation start
-indexes_list = ["MIDCPNIFTY29APR2410875PE", "NIFTY25APR2422400CE"]
+indexes_list = ["MIDCPNIFTY29APR2410875PE", "NIFTY02MAY2422400CE", "BANKNIFTY30APR2448700CE"]
 index_candle_durations = {
-    indexes_list[0]: CandleDuration.ONE_MINUTE,
-    indexes_list[1]: CandleDuration.ONE_MINUTE
+    indexes_list[0]: CandleDuration.THREE_MINUTE,
+    indexes_list[1]: CandleDuration.FIVE_MINUTE,
+    indexes_list[2]: CandleDuration.TEN_MINUTE,
 }
 
 # price comparision
@@ -122,7 +127,7 @@ class SmartApiDataProvider(DataProviderInterface):
 
     def fetch_candle_data(self, token, interval) -> pd.DataFrame:
         to_date = datetime.now()
-        from_date = to_date - timedelta(minutes=5)
+        from_date = to_date - timedelta(minutes=360)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
         to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
         historic_params = {
@@ -156,7 +161,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
     waiting_for_buy = True
     price = 0
     trading_price = 0
-    number_of_candles = 3
+    number_of_candles = 10
     trade_details = {"done":False,"index":None,'datetime':datetime.now()}
 
     def check_indicators(self, data: pd.DataFrame, token:str,  index: int = 0) -> tuple[Signal, float]:
@@ -169,7 +174,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
             print("NUMBER OF CANDLES", self.number_of_candles)
             print("DATA length", len(data))
 
-            for i in range(len(data) - 2, 0, -1):
+            for i in range(self.number_of_candles, 0, -1):
             # for i in range(len(data)-1, 0, -1):
                 current_candle = data.iloc[i]
                 previous_candle = data.iloc[i - 1]
@@ -210,6 +215,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.trade_details['datetime'] = datetime.now()
                 print("PRE CONDITION PRICE", self.trading_price, "CURRENT LTP", ltp_price)
                 print("TRADE BOUGHT due to LTP>Price", self.trade_details)
+                write_logs("BOUGHT", token, self.price, "NILL", f"LTP > condition matched price {self.trading_price}")
                 return Signal.BUY, self.price
                 
             # elif self.price >= current_high * buying_multiplier:
@@ -236,6 +242,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
                 print("LTP PRICE and Selling price", ltp_price, self.price)
+                write_logs("SOLD", token, self.price, "Profit", f"LTP > 1.10* buying price {self.price}")
                 self.price = ltp_price
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
@@ -250,10 +257,12 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
                 print("LTP PRICE and Selling price", ltp_price, self.price)
+                write_logs("SOLD", token, self.price, "Loss", f"LTP < {price_vs_ltp_mulitplier} * buying price {self.price}")
                 self.price = ltp_price
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
                 print("TRADE SOLD LOSS LTP",self.trade_details)
+                write_logs("SOLD", token, self.price, "LOSS", f"LTP > 1.10*buying price {ltp_price} < {price_vs_ltp_mulitplier} {self.price}")
                 return Signal.SELL, self.price
             
             elif (data[selling_OHLC1].iloc[-2] >= self.price * selling_OHLC1_multiplier):
@@ -263,6 +272,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
                 print("LTP PRICE and Selling price", data[selling_OHLC1].iloc[-2], self.price)
+                write_logs("SOLD", token, self.price, "Profit", f"Latest made candle High > 1.10*buying price => {data[selling_OHLC1].iloc[-2]} > {selling_OHLC1_multiplier} *{self.price}")
                 self.price = data[selling_OHLC1].iloc[-2]
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
@@ -277,8 +287,8 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
                 print("LTP PRICE and Selling price", data[selling_OHLC2].iloc[-2], self.price)
-
                 self.price = data[selling_OHLC2].iloc[-2]
+                write_logs("SOLD", token, self.price, "Loss", f"Latest made candle Low < 0.95*buying price => {data[selling_OHLC1].iloc[-2]} <= {selling_OHLC2_multiplier} {self.price}")
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
                 print("Selling price", self.price)
@@ -327,19 +337,7 @@ class BaseStrategy:
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
-            time.sleep(8)
-        # self.nfo_tokens = [Token(instrument.exch_seg, instrument.token, instrument.symbol) for instrument in self.instruments]
-        # self.data = {token: self.data_provider.fetch_candle_data(token) for token in self.nfo_tokens}
-        # for token, token_data in self.data.items():
-        #     signal, price = self.indicator.check_indicators(token_data, token,  index)
-        #     print("_" * 10)
-        #     print("Signal: ", signal)
-        #     print("Price: ", price)
-        #     print("Data: ", token_data.iloc[index])
-        #     print("Token: ", token)
-        #     print("Time: ", token_data.iloc[index]["timestamp"])
-        #     print("_" * 10)
-        
+            time.sleep(15)        
 
     def continuously_fetch_ltp_data(self):
         while True:
@@ -354,14 +352,9 @@ class BaseStrategy:
         index = -1
         # threading.Thread(target=self.continuously_fetch_ltp_data, args=()).start()
         threading.Thread(target=self.process_data, args=(index)).start()
-        # threading.Timer(3, self.process_data, args=(index,)).start()
         
         while True:
             self.process_data(index)
-            # time.sleep(50)
-            # if not index > 2: 
-            #     index += 1
-            # else: index = index
 
 
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -372,6 +365,13 @@ API_KEY = "T4MHVpXH"
 CLIENT_CODE = "J263557"
 PASSWORD = "7753"
 TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+
+LTP_API_KEY = "MolOSZTR"
+LTP_CLIENT_CODE = "S55329579"
+LTP_PASSWORD = "4242"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 LTP_API_KEY = "FJrreQAW"
 
 api_key = API_KEY
@@ -380,20 +380,20 @@ client_code = CLIENT_CODE
 password = PASSWORD
 ltp_api_key = LTP_API_KEY
 
-
 smart = SmartConnect(api_key=api_key)
-ltp_smart = SmartConnect(api_key=ltp_api_key)
-
 data = smart.generateSession(
     clientCode=client_code,
     password=password,
     totp=pyotp.TOTP(token_code).now()
 )
+
+ltp_smart = SmartConnect(api_key=LTP_API_KEY)
 ltp_data = ltp_smart.generateSession(
-    clientCode=client_code,
-    password=password,
-    totp=pyotp.TOTP(token_code).now()
+    clientCode=LTP_CLIENT_CODE,
+    password=LTP_PASSWORD,
+    totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
 )
+
 try: 
     auth_token = data["data"]["jwtToken"]
     auth_token = ltp_data["data"]["jwtToken"]
