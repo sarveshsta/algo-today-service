@@ -13,7 +13,7 @@ from SmartApi import SmartConnect
 from datetime import datetime
 
 def write_logs(type, index, price, status, reason):
-    with open('logs/trade/logs.txt', 'w+') as f:
+    with open('logs/trade/logs.txt', 'a+') as f:
         f.write(f'Trade {type} in {index} at {price} with {status}, reason {reason} at {datetime.now()}')
         f.close()
     print("LOGS WRITTEN")
@@ -29,7 +29,7 @@ indexes_list = ["MIDCPNIFTY29APR2410875PE", "NIFTY02MAY2422400CE", "BANKNIFTY30A
 index_candle_durations = {
     indexes_list[0]: CandleDuration.THREE_MINUTE,
     indexes_list[1]: CandleDuration.FIVE_MINUTE,
-    indexes_list[2]: CandleDuration.TEN_MINUTE,
+    indexes_list[2]: CandleDuration.THREE_MINUTE,
 }
 
 # price comparision
@@ -142,8 +142,10 @@ class SmartApiDataProvider(DataProviderInterface):
         data = pd.DataFrame(res_json["data"], columns=columns)
 
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
-        data['LTP'] = float(ltp_data['data']['ltp'])      
-        return data
+        data['LTP'] = float(ltp_data['data']['ltp'])
+
+        data_reversed = data.iloc[::-1].reset_index(drop=True)
+        return data_reversed
     
     def fetch_ltp_data(self, token):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
@@ -168,28 +170,22 @@ class MaxMinOfLastTwo(IndicatorInterface):
         ltp_price = float(data['LTP'][0])
         token = str(token).split(':')[-1]
         print("TOKEN", token)
-        print("DATA:", data)
+        print("DATA:", data[0:15])
         if self.waiting_for_buy == True:
             if self.number_of_candles > len(data)-2: self.number_of_candles= len(data) - 2 
             print("NUMBER OF CANDLES", self.number_of_candles)
             print("DATA length", len(data))
 
-            for i in range(self.number_of_candles, 0, -1):
-            # for i in range(len(data)-1, 0, -1):
+            for i in range(1, self.number_of_candles+1):
                 current_candle = data.iloc[i]
-                previous_candle = data.iloc[i - 1]
+                previous_candle = data.iloc[i + 1]
 
-                print(f'C{i} => {current_candle[OHLC_1]} H{i-1} => {previous_candle[OHLC_2]}')
+                print(f'C{i} => {current_candle[OHLC_1]} H{i+1} => {previous_candle[OHLC_2]}')
 
                 if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
-                    if i < len(data) - 1:
-                        high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, len(data)-1)]
-                        max_high = max(high_values)
-                        print("HIGH VALUES", high_values)
-                    else: 
-                        high_values = [float(data.iloc[i][OHLC_2])]
-                        max_high = max(high_values)
-
+                    high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 0, -1)]
+                    max_high = max(high_values)
+                    print("HIGH VALUES", high_values)
 
                     self.price = max_high
                     self.trading_price = max_high
@@ -197,10 +193,9 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     self.price = current_candle[OHLC_2]
                     self.trade_details['index'] = token
                     print("Condition matched", self.price)
-                    print("INDEX DETAILS", self.trade_details)
                     break
 
-        current_high = data[buying_OHLC].iloc[-2]
+        current_high = data[buying_OHLC].iloc[1]
 
         if not self.to_buy and token == self.trade_details['index']:
             if ltp_price > self.price:
@@ -265,21 +260,21 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 write_logs("SOLD", token, self.price, "LOSS", f"LTP > 1.10*buying price {ltp_price} < {price_vs_ltp_mulitplier} {self.price}")
                 return Signal.SELL, self.price
             
-            elif (data[selling_OHLC1].iloc[-2] >= self.price * selling_OHLC1_multiplier):
+            elif (data[selling_OHLC1].iloc[1] >= self.price * selling_OHLC1_multiplier):
                 self.to_sell = True
                 self.waiting_for_buy = True
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                print("LTP PRICE and Selling price", data[selling_OHLC1].iloc[-2], self.price)
+                print("LTP PRICE and Selling price", data[selling_OHLC1].iloc[1], self.price)
                 write_logs("SOLD", token, self.price, "Profit", f"Latest made candle High > 1.10*buying price => {data[selling_OHLC1].iloc[-2]} > {selling_OHLC1_multiplier} *{self.price}")
-                self.price = data[selling_OHLC1].iloc[-2]
+                self.price = data[selling_OHLC1].iloc[1]
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
                 print("TRADE SOLD PROFIT HIGH", self.trade_details)
                 return Signal.SELL, self.price 
             
-            elif (data[selling_OHLC2].iloc[-2] <= self.price * selling_OHLC2_multiplier):
+            elif (data[selling_OHLC2].iloc[1] <= self.price * selling_OHLC2_multiplier):
                 
                 self.to_sell = True
                 self.waiting_for_buy = True
@@ -287,8 +282,8 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
                 print("LTP PRICE and Selling price", data[selling_OHLC2].iloc[-2], self.price)
-                self.price = data[selling_OHLC2].iloc[-2]
-                write_logs("SOLD", token, self.price, "Loss", f"Latest made candle Low < 0.95*buying price => {data[selling_OHLC1].iloc[-2]} <= {selling_OHLC2_multiplier} {self.price}")
+                self.price = data[selling_OHLC2].iloc[1]
+                write_logs("SOLD", token, self.price, "Loss", f"Latest made candle Low < 0.95*buying price => {data[selling_OHLC1].iloc[1]} <= {selling_OHLC2_multiplier} {self.price}")
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
                 print("Selling price", self.price)
@@ -333,7 +328,6 @@ class BaseStrategy:
             print("_" * 10)
             print("Signal: ", signal)
             print("Price: ", price)
-            print("Data: ", token_data.iloc[index])
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
