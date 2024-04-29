@@ -13,7 +13,7 @@ from SmartApi import SmartConnect
 from datetime import datetime
 
 def write_logs(type, index, price, status, reason):
-    with open('trade/logs.txt', 'w+') as f:
+    with open('logs/trade/logs.txt', 'w+') as f:
         f.write(f'Trade {type} in {index} at {price} with {status}, reason {reason} at {datetime.now()}')
         f.close()
     print("LOGS WRITTEN")
@@ -226,9 +226,9 @@ class MaxMinOfLastTwo(IndicatorInterface):
             #     self.waiting_for_buy = False
             #     self.price = current_high
             #     self.trade_details['done'] = True
-            #     self.trade_details['index'] = token
+            #     self.trade_details[''] = token
             #     self.trade_details['datetime'] = datetime.now()
-            #     print("TRADE BOUGHT due to PRICE > Current high",self.price, current_high, self.trade_details)
+            #     print("TRADE BOUGHTindex due to PRICE > Current high",self.price, current_high, self.trade_details)
             #     return Signal.BUY, self.price
             return Signal.WAITING_TO_BUY, self.price
         
@@ -337,7 +337,7 @@ class BaseStrategy:
             print("Token: ", token)
             print("Time: ", token_data.iloc[index]["timestamp"])
             print("_" * 10)
-            time.sleep(18)        
+            time.sleep(15)        
 
     def continuously_fetch_ltp_data(self):
         while True:
