@@ -1,3 +1,4 @@
+import json
 import threading, time
 from datetime import datetime, timedelta
 from enum import Enum
@@ -31,7 +32,7 @@ class CandleDuration(Enum):
 
 
 # variables initialisation start
-indexes_list = ["MIDCPNIFTY10JUN2412050CE"]
+indexes_list = ["MIDCPNIFTY10JUN2412050CE", "NIFTY20JUN2421500PE"]
 index_candle_durations = {
     indexes_list[0]: CandleDuration.ONE_MINUTE,
 }
@@ -125,6 +126,8 @@ class DataProviderInterface:
     def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
         raise NotImplementedError("Subclasses must implement fetch_candle_data()")
 
+    def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
+        raise NotImplementedError("Subclasses must implement fetch_ltp_data()")
 
 class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
@@ -132,6 +135,7 @@ class SmartApiDataProvider(DataProviderInterface):
         self.__ltpSmart = ltpSmart
 
     def fetch_candle_data(self, token, interval) -> pd.DataFrame:
+        # print(f"token.exch_seg: {token.exch_seg}, token.token_id: {token.token_id}, interval: {interval}")
         to_date = datetime.now()
         from_date = to_date - timedelta(minutes=360)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
@@ -149,8 +153,10 @@ class SmartApiDataProvider(DataProviderInterface):
 
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
         data["LTP"] = float(ltp_data["data"]["ltp"])
+        print(f"data: {data}")
 
         data_reversed = data.iloc[::-1].reset_index(drop=True)
+        print(f"data_reversed: {data_reversed}")
         return data_reversed
 
     def fetch_ltp_data(self, token):
@@ -161,7 +167,7 @@ class SmartApiDataProvider(DataProviderInterface):
 class IndicatorInterface:
     def check_indicators(self, data: pd.DataFrame) -> List[str]:
         raise NotImplementedError("Subclasses must implement check_indicators()")
-
+            
 
 class MaxMinOfLastTwo(IndicatorInterface):
     global price
@@ -308,7 +314,10 @@ class MaxMinOfLastTwo(IndicatorInterface):
             self.trade_details["done"] = False
             print("TRADE DETAILS", self.trade_details)
             return Signal.WAITING_TO_BUY, self.price
-
+        
+    def check_indicators(self, data: pd.DataFrame, index: int = 0) -> tuple[Signal, float]:
+        value = 1.2
+        return Signal.BUY, value
 
 class BaseStrategy:
     def __init__(
@@ -336,7 +345,7 @@ class BaseStrategy:
             print(f"LTP for {instrument.symbol}: {ltp}")
 
             token_data = self.data_provider.fetch_candle_data(token, interval=candle_duration.value)
-            signal, price = self.indicator.check_indicators(ltp, token)
+            signal, price = self.indicator.check_indicators(ltp)
             print(f"Signal: {signal}, Price: {price}")
 
         for instrument in self.instruments:
@@ -344,7 +353,7 @@ class BaseStrategy:
 
             token_data = self.data_provider.fetch_candle_data(token, interval=candle_duration.value)
             ltp = self.data_provider.fetch_ltp_data(token)
-            signal, price = self.indicator.check_indicators(token_data, token, index)
+            signal, price = self.indicator.check_indicators(token_data)
         time.sleep(self.ltp_comparison_interval)
 
     def process_data(self, index: int):
@@ -352,67 +361,75 @@ class BaseStrategy:
             token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
             candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.ONE_MINUTE)
             token_data = self.data_provider.fetch_candle_data(token, interval=candle_duration.value)
-            ltp = self.data_provider.fetch_ltp_data(token)
-            signal, price = self.indicator.check_indicators(token_data, token, index)
+            # print(f"token_data: {token_data}")
+            signal, price = self.indicator.check_indicators(token_data)
+            # ltp = self.data_provider.fetch_ltp_data(token)
+            try:
+                signal, price = self.indicator.check_indicators(token_data)
+            except Exception:
+                pass
+                # return self.start_strategy()
             print("_" * 10)
+            # print("index: ", index)
             print("Signal: ", signal)
             print("Price: ", price)
             print("Token: ", token)
-            print("Time: ", token_data.iloc[index]["timestamp"])
+            # print("Time: ", token_data.iloc[index, 0])
             print("_" * 10)
             time.sleep(15)
 
     def start_strategy(self):
-        index = -1
-        # threading.Thread(target=self.continuously_fetch_ltp_data, args=()).start()
-        threading.Thread(target=self.process_data, args=(index)).start()
+        index = 1
+        # threading.Thread(target=self.fetch_ltp_continuously, args=()).start()
+        threading.Thread(target=self.process_data, args=(index,)).start()
 
         # while True:
         #     self.process_data(index)
 
+if __name__ == '__main__':
+    NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+    OPT_TYPE = "OPTIDX"
+    EXCH_TYPE = "NFO"
 
-NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
-OPT_TYPE = "OPTIDX"
-EXCH_TYPE = "NFO"
+    API_KEY = "T4MHVpXH"
+    CLIENT_CODE = "J263557"
+    PASSWORD = "7753"
+    TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
 
-API_KEY = "T4MHVpXH"
-CLIENT_CODE = "J263557"
-PASSWORD = "7753"
-TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+    LTP_API_KEY = "MolOSZTR"
+    LTP_CLIENT_CODE = "S55329579"
+    LTP_PASSWORD = "4242"
+    LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 
-LTP_API_KEY = "MolOSZTR"
-LTP_CLIENT_CODE = "S55329579"
-LTP_PASSWORD = "4242"
-LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+    LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+    LTP_API_KEY = "FJrreQAW"
 
-LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
-LTP_API_KEY = "FJrreQAW"
+    api_key = API_KEY
+    token_code = TOKEN_CODE
+    client_code = CLIENT_CODE
+    password = PASSWORD
+    ltp_api_key = LTP_API_KEY
 
-api_key = API_KEY
-token_code = TOKEN_CODE
-client_code = CLIENT_CODE
-password = PASSWORD
-ltp_api_key = LTP_API_KEY
+    smart = SmartConnect(api_key=api_key)
 
-smart = SmartConnect(api_key=api_key)
-data = smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+    ltp_smart = SmartConnect(api_key=LTP_API_KEY)
+    ltp_data = ltp_smart.generateSession(
+        clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+    )
 
-ltp_smart = SmartConnect(api_key=LTP_API_KEY)
-ltp_data = ltp_smart.generateSession(
-    clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-)
+    try:
+        data = smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+        auth_token = data["data"]["jwtToken"]
+        auth_token = ltp_data["data"]["jwtToken"]
+        # print(f"auth_token: {auth_token}")
+    except:
+        print("Access denied, exceeding access rate")
+        exit()
 
-try:
-    auth_token = data["data"]["jwtToken"]
-    auth_token = ltp_data["data"]["jwtToken"]
-except:
-    print("Access denied, exceeding access rate")
-    exit()
+    feed_token = smart.getfeedToken()
 
-feed_token = smart.getfeedToken()
-
-instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, indexes_list)
-smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
-max_transactions_indicator = MaxMinOfLastTwo()
-strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_candle_durations)
-strategy.start_strategy()
+    instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, indexes_list)
+    smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
+    max_transactions_indicator = MaxMinOfLastTwo()
+    strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_candle_durations)
+    strategy.start_strategy()
