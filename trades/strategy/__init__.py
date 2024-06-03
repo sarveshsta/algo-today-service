@@ -1,4 +1,4 @@
-import json
+import json,os
 import threading, time
 from datetime import datetime, timedelta
 from enum import Enum
@@ -15,9 +15,17 @@ from datetime import datetime
 
 
 def write_logs(type, index, price, status, reason):
-    with open("logs/trade/logs.txt", "a+") as f:
+    log_dir = "logs/trade"
+    log_file = os.path.join(log_dir, "logs.txt")
+    
+    # Create the directory if it does not exist
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Open the file and append the log
+    with open(log_file, "a+") as f:
         f.write(f"Trade {type} in {index} at {price} with {status}, reason {reason} at {datetime.now()} \n")
-        f.close()
+    
     print("LOGS WRITTEN")
 
 
@@ -32,9 +40,9 @@ class CandleDuration(Enum):
 
 
 # variables initialisation start
-indexes_list = ["MIDCPNIFTY10JUN2412050CE"]
+indexes_list = ["BANKNIFTY12JUN2448600CE"]
 index_candle_durations = {
-    indexes_list[0]: CandleDuration.ONE_MINUTE,
+    indexes_list[0]: CandleDuration.THREE_MINUTE,
 }
 
 # price comparision
