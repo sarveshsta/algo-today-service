@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from enum import Enum
+import json
 from json.decoder import JSONDecodeError
 from typing import List
 from urllib.error import URLError
@@ -65,9 +66,9 @@ class Signal(Enum):
     WAITING_TO_SELL = 4
 
 # variables initialisation start
-indexes_list = ["NIFTY20JUN2421500PE"]
+indexes_list = ["BANKNIFTY12JUN2449900CE"]
 index_candle_durations = {
-    indexes_list[0]: CandleDuration.THREE_MINUTE,
+    indexes_list[0]: CandleDuration.ONE_MINUTE,
 }
  
 class Token:
@@ -120,6 +121,8 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
             response = requests.get(self.url)
             response.raise_for_status()
             data = response.json()
+            with open("data.json", "w") as json_file:
+                json.dump(data, json_file, indent=4)
             return [Instrument(**item) for item in data if item["exch_seg"] == "NFO" and item["symbol"] in self.tokens]
         except (URLError, JSONDecodeError) as e:
             print(f"Error reading instruments from {self.url}: {e}")
@@ -156,6 +159,7 @@ class SmartApiDataProvider(DataProviderInterface):
 
     def fetch_ltp_data(self, token):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
+        print(f"ltp_data:   {ltp_data}")
         return ltp_data
     
     def place_order(self, symbol, token, transaction, price, quantity):
@@ -198,8 +202,8 @@ class MaxMinOfLastTwo(IndicatorInterface):
     trade_details = {"done":False, "index":None, 'datetime':datetime.now()}
     
     # this is our main strategy function
-    def check_indicators(self, data: pd.DataFrame, token:str,  index: int = 0) -> tuple[Signal, float]:
-        ltp = float(data['LTP'][0])
+    def check_indicators(self, data: pd.DataFrame, token:str,  ltp_value:float, index: int = 0) -> tuple[Signal, float]:
+        ltp = ltp_value
         token = str(token).split(':')[-1]
         print("TOKEN", token)
         print("DATA:", data[0:15])
@@ -228,7 +232,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
 
         if not self.to_buy and token == self.trade_details['index']:
-            if ltp > self.price:
+            if ltp < self.price:
                 self.to_buy = True
                 self.waiting_for_sell = True
 
@@ -250,7 +254,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
         elif self.to_buy and not self.to_sell and self.waiting_for_sell \
             and self.trade_details['index'] == token:
 
-            if ltp >= 1.10 * self.price:
+            if ltp >= 0.05 * self.price:
                 self.to_sell = True
                 self.waiting_for_buy = True
 
@@ -357,12 +361,13 @@ class BaseStrategy:
         self.ltp_comparison_interval = 2
         self.candle_data = pd.DataFrame(columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
         self.ltp_value = None
+        self.token = ""
 
     async def fetch_ltp_data(self):
         try:
             for instrument in self.instruments:
-                token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-                ltp_data = await async_return(self.data_provider.fetch_ltp_data(token))
+                self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+                ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
                 if 'data' not in ltp_data or 'ltp' not in ltp_data['data']:
                     logger.error("No 'ltp' key in the LTP response JSON")
                     continue  # Continue to the next instrument
@@ -375,9 +380,9 @@ class BaseStrategy:
     async def fetch_candle_data(self):
         try:
             for instrument in self.instruments:
-                token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+                self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.THREE_MINUTE).value  # Default to "1min"
-                candle_data = await async_return(self.data_provider.fetch_candle_data(token, interval=candle_duration))
+                candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
                 if candle_data.empty:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
@@ -390,9 +395,12 @@ class BaseStrategy:
         while True:
             await asyncio.sleep(1)
             if not self.candle_data.empty and self.ltp_value is not None:
-                latest_candle = self.candle_data.iloc[-1]
-                logger.info(f"Comparing LTP {self.ltp_value} with latest candle close {latest_candle['Close']}")
+                latest_candle = self.candle_data.iloc[1]
+                logger.info(f"Comparing LTP {self.ltp_value} with latest candle high {latest_candle['High']}")
                 # Implement your comparison logic here
+                signal, price = await async_return(self.indicator.check_indicators(self.candle_data, str(self.token), self.ltp_value))
+                logger.info(f"Signal: {signal}, Price: {price}")
+                logger.info(f"Token: {self.token}")
             else:
                 logger.info("Waiting for data...")
 
