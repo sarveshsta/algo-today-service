@@ -4,6 +4,7 @@ import uvicorn
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import trades.models as trades_models
 import users.models as user_models
@@ -23,6 +24,7 @@ from core.redis import PubSubClient
 from trades import route as trade_route
 from trades.stream import WSApp
 from users import route as user_route
+from trades.strategy import my_strategy as strategy_route
 
 user_models.Base.metadata.create_all(bind=engine)
 trades_models.Base.metadata.create_all(bind=engine)
@@ -83,6 +85,28 @@ app = FastAPI(
 
 app.include_router(user_route.router, prefix="/users", tags=["users"])
 app.include_router(trade_route.router, prefix="/tokens", tags=["tokens"])
+app.include_router(strategy_route.router, prefix="/strategy")
+
+@app.get("/", tags=["Root"])
+async def read_root():
+    return {"message": "Welcome to the API!"}
+
+# from trades.managers import start_strategy, stop_pause_strategy
+# @app.get("/run")
+# def run_strategy():
+#     print("data")
+#     response = start_strategy()
+#     if response:
+#         return JSONResponse({"success": True}, status_code=200)
+#     return JSONResponse({"success": False}, status_code=400)
+
+# @app.get("/stop")
+# def exit_strategy():
+#     print("stop or pause", asyncio.tasks.all_tasks())
+#     response = stop_pause_strategy("strategy_1")
+#     if response:
+#         return JSONResponse({"loop exit success": True}, status_code=200)
+#     return JSONResponse({"loop exit success": False}, status_code=400)
 
 origins = [
     "http://localhost.tiangolo.com",

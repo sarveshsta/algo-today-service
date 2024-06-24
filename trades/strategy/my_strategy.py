@@ -1,9 +1,12 @@
+import fastapi
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 import asyncio
 from datetime import datetime, timedelta
 from enum import Enum
 import json
 from json.decoder import JSONDecodeError
-from typing import List
+from typing import List, Dict
 from urllib.error import URLError
 import logging
 import pandas as pd
@@ -12,6 +15,38 @@ import requests
 from SmartApi import SmartConnect
 from datetime import datetime
 import os
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+from trades.strategy.utility import save_order
+
+router = fastapi.APIRouter()
+tasks: Dict[str, asyncio.Task] = {}
+
+load_dotenv()
+api_key = os.getenv('API_KEY')
+client_code = os.getenv('CLIENT_CODE')
+password = os.getenv('PASSWORD')
+token_code = os.getenv('TOKEN_CODE')
+
+
+#constant data
+
+# index details
+NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+OPT_TYPE = "OPTIDX"
+EXCH_TYPE = "NFO"
+
+# client code to get LTP data
+LTP_API_KEY = "MolOSZTR"
+LTP_CLIENT_CODE = "S55329579"
+LTP_PASSWORD = "4242"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+
+# https://pypi.org/project/smartapi-python/
+# objects to get `@smart` candle data and `@ltp_smart`LTP data respectively
+smart = SmartConnect(api_key=api_key)
+ltp_smart = SmartConnect(api_key=LTP_API_KEY)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -66,11 +101,10 @@ class Signal(Enum):
     WAITING_TO_SELL = 4
 
 # variables initialisation start
-indexes_list = ["BANKNIFTY12JUN2449900CE"]
-index_candle_durations = {
-    indexes_list[0]: CandleDuration.ONE_MINUTE,
+index_and_candle_durations = {
+    "BANKNIFTY26JUN2451400CE": CandleDuration.ONE_MINUTE,
 }
- 
+
 class Token:
     def __init__(self, exch_seg: str, token_id: str, symbol: str):
         self.exch_seg = exch_seg
@@ -116,6 +150,7 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
         self.tokens = tokens or []
 
     def read_instruments(self) -> List[Instrument]:
+        print("self.tokens: ",self.tokens)
         try:
             # Robust error handling to ensure proper data reading
             response = requests.get(self.url)
@@ -135,6 +170,12 @@ class DataProviderInterface:
 
     def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
         raise NotImplementedError("Subclasses must implement fetch_ltp_data()")
+
+    def place_order(self, symbol: str, token: str, transaction, price: float, quantity: int):
+        raise NotImplementedError("Subclasses must implement place_order()")
+
+    def modify_order(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
+        raise NotImplementedError("Subclasses must implement modify_order()")
 
 class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
@@ -158,6 +199,7 @@ class SmartApiDataProvider(DataProviderInterface):
         return pd.DataFrame(res_json["data"], columns=columns)
 
     def fetch_ltp_data(self, token):
+        print(f"ltp_data token:   {token}")
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
         print(f"ltp_data:   {ltp_data}")
         return ltp_data
@@ -178,9 +220,14 @@ class SmartApiDataProvider(DataProviderInterface):
                 "stoploss": "0",
                 "quantity": quantity,
             }
-            orderId = self.__smart.placeOrder(orderparams)
-            print(f"The order id is: {orderId}")
-            return orderId
+            # Method 1: Place an order and return the order ID
+            order_response = self.__smart.placeOrder(orderparams)
+            logger.info(f"PlaceOrder : {order_response}")
+
+            # Method 2: Place an order and return the full response
+            full_order_response = self.__smart.placeOrderFullResponse(orderparams)
+            logger.info(f"PlaceOrder : {full_order_response}")
+            return order_response, full_order_response
         except Exception as e:
             print(f"Order placement failed: {e}")
             return False
@@ -361,8 +408,9 @@ class BaseStrategy:
         self.ltp_comparison_interval = 2
         self.candle_data = pd.DataFrame(columns=["timestamp", "Open", "High", "Low", "Close", "Volume"])
         self.ltp_value = None
-        self.token = ""
-
+        self.token = Token
+        self.stop_event = asyncio.Event()
+        
     async def fetch_ltp_data(self):
         try:
             for instrument in self.instruments:
@@ -382,7 +430,9 @@ class BaseStrategy:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.THREE_MINUTE).value  # Default to "1min"
+                print("candle_duration: ",candle_duration)
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
+                print("candle_data: ",candle_data)
                 if candle_data.empty:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
@@ -397,70 +447,92 @@ class BaseStrategy:
             if not self.candle_data.empty and self.ltp_value is not None:
                 latest_candle = self.candle_data.iloc[1]
                 logger.info(f"Comparing LTP {self.ltp_value} with latest candle high {latest_candle['High']}")
+
                 # Implement your comparison logic here
-                signal, price = await async_return(self.indicator.check_indicators(self.candle_data, str(self.token), self.ltp_value))
+                signal, price = await async_return(self.indicator.check_indicators(self.candle_data, self.token, self.ltp_value))
                 logger.info(f"Signal: {signal}, Price: {price}")
-                logger.info(f"Token: {self.token}")
+                if signal in [Signal.BUY, Signal.SELL]:
+                    logger.info(f"Signal: {signal}, Price: {price}")
+                    order_response, full_order_response = await async_return(self.data_provider.place_order(self.token, signal, price))
+                    logger.info(f"Full Order Response: {full_order_response}")
+
+                    # Save to database
+                    await save_order(order_response, full_order_response)
             else:
                 logger.info("Waiting for data...")
 
-    async def start_strategy(self):
-        asyncio.create_task(self.fetch_ltp_data_continuous())
-        asyncio.create_task(self.process_data())
+    async def start(self):
+        try:
+            while not self.stop_event.is_set():
+                await self.fetch_candle_data()
+                logger.info("fetch_candle_data continue")
+                await asyncio.sleep(10)  # fetch candle data every 10 seconds
+        except asyncio.CancelledError:
+            logger.info("start task was cancelled")
+            raise
 
-        while True:
-            await self.fetch_candle_data()
-            await asyncio.sleep(10)  # fetch candle data every 10 seconds
+    async def run(self):
+        await asyncio.gather(
+            self.fetch_ltp_data_continuous(),
+            self.process_data(),
+            self.start()
+        )
 
     async def fetch_ltp_data_continuous(self):
-        while True:
-            await self.fetch_ltp_data()
-            await asyncio.sleep(1)  # fetch LTP data every second
+        try:
+            while not self.stop_event.is_set():
+                await self.fetch_ltp_data()
+                logger.info("fetch_ltp_data_continuous continues")
+                await asyncio.sleep(1)  # fetch LTP data every second
+        except asyncio.CancelledError:
+            logger.info("fetch_ltp_data_continuous task was cancelled")
+            raise
 
-if __name__ == '__main__':
-    NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
-    OPT_TYPE = "OPTIDX"
-    EXCH_TYPE = "NFO"
+    async def stop(self):
+        self.stop_event.set()
 
-    # creds to get candle data
-    API_KEY = "T4MHVpXH"
-    CLIENT_CODE = "J263557"
-    PASSWORD = "7753"
-    TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
 
-    # client code to get LTP data
-    LTP_API_KEY = "MolOSZTR"
-    LTP_CLIENT_CODE = "S55329579"
-    LTP_PASSWORD = "4242"
-    LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+# Start strategy endpoint
+@router.get("/start_strategy")
+async def start_strategy():
+    strategy_id = "strategy_1"
+    if strategy_id in tasks:
+        raise HTTPException(status_code=400, detail="Strategy already running")
+    print("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
 
-    api_key = API_KEY
-    token_code = TOKEN_CODE
-    client_code = CLIENT_CODE
-    password = PASSWORD
-    ltp_api_key = LTP_API_KEY
-
-    # https://pypi.org/project/smartapi-python/
-    # objects to get `@smart` candle data and `@ltp_smart`LTP data respectively
-    smart = SmartConnect(api_key=api_key)
-    ltp_smart = SmartConnect(api_key=LTP_API_KEY)
-    
-    ltp_data = ltp_smart.generateSession(
+    ltp_smart.generateSession(
         clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
     )
 
     try:
-        data = smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
-        auth_token = data["data"]["jwtToken"]
-        auth_token = ltp_data["data"]["jwtToken"]
-    except:
-        print("Access denied, exceeding access rate")
-        exit()
+        smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+    except Exception as e:
+        return {"message": "Strategy started", "success": True}
 
-    feed_token = smart.getfeedToken()
-
-    instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, indexes_list)
+    instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
     smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
     max_transactions_indicator = MaxMinOfLastTwo()
-    strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_candle_durations)
-    asyncio.run(strategy.start_strategy())
+    strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
+    task = asyncio.create_task(strategy.run())
+    tasks[strategy_id] = {"task": task, "strategy": strategy}
+    return {"message": "Strategy started", "success": True}
+
+# Stop strategy endpoint
+@router.get("/stop_strategy")
+async def stop_strategy():
+    strategy_id = "strategy_1"
+    if strategy_id not in tasks:
+        raise HTTPException(status_code=400, detail="Strategy not found")
+
+    task_info = tasks[strategy_id]
+    task = task_info["task"]
+
+    # Cancel the task
+    try:
+        task.cancel()
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    del tasks[strategy_id]
+    return {"message": "Strategy stopped", "success": True}

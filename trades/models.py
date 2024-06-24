@@ -1,13 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Date, String
+from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, ForeignKey, Date
 from sqlalchemy.orm import declarative_base
-
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey
-from sqlalchemy.sql.sqltypes import Enum
-from sqlalchemy.ext.declarative import declarative_base
-
 from core.mixins import CoreBaseModel
 
 Base = declarative_base()
@@ -44,3 +39,26 @@ class TradeDetails(CoreBaseModel, Base):
     price = Column(Float, nullable=False)
     trade_time = Column(DateTime, default=datetime.now())
 
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(String, index=True, unique=True)
+    unique_order_id = Column(String, index=True, unique=True)
+    token = Column(String)
+    signal = Column(String)
+    price = Column(Float)
+    status = Column(String)
+    quantity = Column(Integer)
+    ordertype = Column(String)
+    producttype = Column(String)
+    duration = Column(String)
+    stoploss = Column(Float)
+    status = Column(String)
+    transactiontime = Column(DateTime)
+    full_response = Column(JSON)
+    created_at = Column(DateTime, default=datetime.now())
+    updated_at = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
+
+    def calculate_total_value(self):
+        return self.price * self.quantity
