@@ -16,7 +16,6 @@ async def save_order(order_response: dict, full_order_response: dict, db: Sessio
         producttype = full_order_response['data'].get('producttype'),
         duration = full_order_response['data'].get('duration'),
         stoploss = full_order_response['data'].get('stoploss'),
-        status = full_order_response['data'].get('status'),
         transactiontime = full_order_response['data'].get('transactiontime'),
         full_response = full_order_response['data'].get('full_response')
     )

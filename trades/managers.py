@@ -59,3 +59,5 @@ def retrieve_strike_price(index: str, expiry: str, db: Session = Depends(get_db)
     return None
     
     
+def fetch_previous_orders():
+    pass

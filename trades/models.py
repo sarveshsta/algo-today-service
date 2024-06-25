@@ -54,7 +54,6 @@ class Order(Base):
     producttype = Column(String)
     duration = Column(String)
     stoploss = Column(Float)
-    status = Column(String)
     transactiontime = Column(DateTime)
     full_response = Column(JSON)
     created_at = Column(DateTime, default=datetime.now())
