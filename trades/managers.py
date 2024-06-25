@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
-from trades.models import TokenModel
+from trades.models import TokenModel, Order
 
 
 def get_tokens(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
@@ -59,5 +59,25 @@ def retrieve_strike_price(index: str, expiry: str, db: Session = Depends(get_db)
     return None
     
     
-def fetch_previous_orders():
-    pass
+def fetch_previous_orders(order_id: int, db: Session = Depends(get_db)):
+    orders = db.query(Order).all()
+    print(orders)
+    if orders:
+        response_list = [{
+            "order_id": order.order_id,
+            "unique_order_id": order.unique_order_id,
+            "token": order.token,
+            "signal": order.signal,
+            "price": order.price,
+            "status": order.status,
+            "quantity": order.quantity,
+            "ordertype": order.ordertype,
+            "producttype": order.producttype,
+            "duration": order.duration,
+            "stoploss": order.stoploss,
+            "transactiontime": order.transactiontime
+        }
+            for order in orders]
+        # print(response_list)
+        return response_list
+    return None
