@@ -15,7 +15,7 @@ from SmartApi import SmartConnect
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-from trades.strategy.utility import save_order
+from trades.strategy.utility import save_order, place_order_mail
 from trades.schema import StartStrategySchema
 from fastapi.encoders import jsonable_encoder
 
@@ -456,7 +456,8 @@ class BaseStrategy:
                     order_response, full_order_response = await async_return(self.data_provider.place_order(self.token, signal, price))
                     logger.info(f"Full Order Response: {full_order_response}")
 
-                    # Save to database
+                    # order mail sent and Save to database
+                    await place_order_mail()
                     await save_order(order_response, full_order_response)
             else:
                 logger.info("Waiting for data...")
@@ -502,7 +503,7 @@ async def start_strategy(strategy: StartStrategySchema):
     }
 
     if strategy.strategy_id in tasks:
-        raise HTTPException(status_code=400, detail="Strategy already running")
+        raise HTTPException(status_code=400, message="Strategy already running")
     print("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
 
     ltp_smart.generateSession(
@@ -532,13 +533,13 @@ async def start_strategy(strategy: StartStrategySchema):
 async def stop_strategy(strategy_id):
     try:
         if strategy_id not in tasks:
-            raise HTTPException(status_code=400, detail="Strategy not found")
+            raise HTTPException(status_code=400, message="Strategy not found")
         task_info = tasks[strategy_id]
         task = task_info['task']
         task.cancel()
         await task
     except asyncio.CancelledError:
-        raise HTTPException(status_code=400, detail="Strategy could not stop")
+        raise HTTPException(status_code=400, message="Strategy Stop")
 
     del tasks[strategy_id]
     return {"message": "Strategy stopped", "success": True}
