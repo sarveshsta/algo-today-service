@@ -1,6 +1,5 @@
 import fastapi
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
 import asyncio
 from datetime import datetime, timedelta
 from enum import Enum
@@ -15,9 +14,10 @@ import requests
 from SmartApi import SmartConnect
 from datetime import datetime
 import os
-from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from trades.strategy.utility import save_order
+from trades.schema import StartStrategySchema
+from fastapi.encoders import jsonable_encoder
 
 router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
@@ -101,9 +101,9 @@ class Signal(Enum):
     WAITING_TO_SELL = 4
 
 # variables initialisation start
-index_and_candle_durations = {
-    "BANKNIFTY26JUN2451400CE": CandleDuration.ONE_MINUTE,
-}
+# index_and_candle_durations = {
+#     "BANKNIFTY26JUN2452500CE": CandleDuration.ONE_MINUTE,
+# }
 
 class Token:
     def __init__(self, exch_seg: str, token_id: str, symbol: str):
@@ -493,10 +493,15 @@ class BaseStrategy:
 
 
 # Start strategy endpoint
-@router.get("/start_strategy")
-async def start_strategy():
-    strategy_id = "strategy_1"
-    if strategy_id in tasks:
+@router.post("/start_strategy")
+async def start_strategy(strategy: StartStrategySchema):
+    print("strategy: ",strategy)
+    strategy_id = strategy.strategy_id
+    index_and_candle_durations = {
+        f"{strategy.index}{strategy.expiry}{strategy.strike_price}{strategy.option}": strategy.chart_time,
+    }
+
+    if strategy.strategy_id in tasks:
         raise HTTPException(status_code=400, detail="Strategy already running")
     print("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
 
@@ -507,7 +512,7 @@ async def start_strategy():
     try:
         smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
     except Exception as e:
-        return {"message": "Strategy started", "success": True}
+        return {"message": str(e), "success": True}
 
     instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
     smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
@@ -515,24 +520,25 @@ async def start_strategy():
     strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
     task = asyncio.create_task(strategy.run())
     tasks[strategy_id] = {"task": task, "strategy": strategy}
-    return {"message": "Strategy started", "success": True}
+    response = {
+        "message": "strategy starts",
+        "success": True,
+        "strategy_id": strategy_id
+    }
+    return response
 
 # Stop strategy endpoint
-@router.get("/stop_strategy")
-async def stop_strategy():
-    strategy_id = "strategy_1"
-    if strategy_id not in tasks:
-        raise HTTPException(status_code=400, detail="Strategy not found")
-
-    task_info = tasks[strategy_id]
-    task = task_info["task"]
-
-    # Cancel the task
+@router.get("/stop_strategy/{strategy_id}")
+async def stop_strategy(strategy_id):
     try:
+        if strategy_id not in tasks:
+            raise HTTPException(status_code=400, detail="Strategy not found")
+        task_info = tasks[strategy_id]
+        task = task_info['task']
         task.cancel()
         await task
     except asyncio.CancelledError:
-        pass
+        raise HTTPException(status_code=400, detail="Strategy could not stop")
 
     del tasks[strategy_id]
     return {"message": "Strategy stopped", "success": True}

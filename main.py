@@ -83,30 +83,13 @@ app = FastAPI(
 )
 
 
-app.include_router(user_route.router, prefix="/users", tags=["users"])
-app.include_router(trade_route.router, prefix="/tokens", tags=["tokens"])
-app.include_router(strategy_route.router, prefix="/strategy")
+app.include_router(user_route.router, prefix="/users", tags=["Users"])
+app.include_router(trade_route.router, prefix="/tokens", tags=["Tokens"])
+app.include_router(strategy_route.router, prefix="/strategy", tags=["Strategy"])
 
 @app.get("/", tags=["Root"])
 async def read_root():
     return {"message": "Welcome to the API!"}
-
-# from trades.managers import start_strategy, stop_pause_strategy
-# @app.get("/run")
-# def run_strategy():
-#     print("data")
-#     response = start_strategy()
-#     if response:
-#         return JSONResponse({"success": True}, status_code=200)
-#     return JSONResponse({"success": False}, status_code=400)
-
-# @app.get("/stop")
-# def exit_strategy():
-#     print("stop or pause", asyncio.tasks.all_tasks())
-#     response = stop_pause_strategy("strategy_1")
-#     if response:
-#         return JSONResponse({"loop exit success": True}, status_code=200)
-#     return JSONResponse({"loop exit success": False}, status_code=400)
 
 origins = [
     "http://localhost.tiangolo.com",

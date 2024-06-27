@@ -59,7 +59,7 @@ def retrieve_strike_price(index: str, expiry: str, db: Session = Depends(get_db)
     return None
     
     
-def fetch_previous_orders(order_id: int, db: Session = Depends(get_db)):
+def fetch_previous_orders(db: Session = Depends(get_db)):
     orders = db.query(Order).all()
     print(orders)
     if orders:
@@ -78,6 +78,5 @@ def fetch_previous_orders(order_id: int, db: Session = Depends(get_db)):
             "transactiontime": order.transactiontime
         }
             for order in orders]
-        # print(response_list)
         return response_list
     return None
