@@ -34,6 +34,7 @@ class TradeDetails(CoreBaseModel, Base):
     __tablename__ = "trades"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True)
     token = Column(String, ForeignKey("tokens.token"), nullable=False)
     signal = Column(String, nullable=False)
     price = Column(Float, nullable=False)
@@ -43,6 +44,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
     order_id = Column(String, index=True, unique=True)
     unique_order_id = Column(String, index=True, unique=True)
     symboltoken = Column(String)
@@ -67,7 +69,9 @@ class Order(Base):
 
 class StrategyValue(Base):
     __tablename__ = "strategy"
+
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
     strategy_name = Column(String, index=True, unique=True)
     index = Column(String, index=True, unique=False)
     strike_price = Column(Float)

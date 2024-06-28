@@ -15,9 +15,8 @@ from SmartApi import SmartConnect
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-from trades.strategy.utility import save_order, place_order_mail
+from trades.strategy.utility import save_order, place_order_mail, save_strategy
 from trades.schema import StartStrategySchema
-from fastapi.encoders import jsonable_encoder
 
 router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
@@ -496,7 +495,6 @@ class BaseStrategy:
 # Start strategy endpoint
 @router.post("/start_strategy")
 async def start_strategy(strategy: StartStrategySchema):
-    print("strategy: ",strategy)
     strategy_id = strategy.strategy_id
     index_and_candle_durations = {
         f"{strategy.index}{strategy.expiry}{strategy.strike_price}{strategy.option}": strategy.chart_time,
@@ -520,6 +518,7 @@ async def start_strategy(strategy: StartStrategySchema):
     max_transactions_indicator = MaxMinOfLastTwo()
     strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
     task = asyncio.create_task(strategy.run())
+    await save_strategy(strategy)
     tasks[strategy_id] = {"task": task, "strategy": strategy}
     response = {
         "message": "strategy starts",

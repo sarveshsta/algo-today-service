@@ -24,6 +24,7 @@ class ExpirySchema(BaseModel):
         from_attributes = True
 
 class StartStrategySchema(BaseModel):
+    user_id: str
     strategy_id: str
     index: str
     strike_price: int

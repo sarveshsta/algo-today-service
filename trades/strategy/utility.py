@@ -1,7 +1,7 @@
 import os, csv
 import aiosmtplib
 from fastapi import Depends
-from trades.models import Order
+from trades.models import Order, StrategyValue
 from sqlalchemy.orm import Session
 from config.database.config import get_db
 from email.message import EmailMessage
@@ -9,11 +9,24 @@ from email.utils import formatdate
 from dotenv import load_dotenv
 
 load_dotenv()
-class Envs:
+class SMTPEnvs:
     USERNAME = os.getenv('USERNAME')
     PASSWORD = os.getenv('PASSWORD')
     PORT = os.getenv('PORT')
     SERVER = os.getenv('SERVER')
+
+async def save_strategy(strategy_data: dict, db: Session = Depends(get_db)):
+    order = StrategyValue(
+        user_id = strategy_data["user_id"],
+        strategy_name = strategy_data["strategy_name"],
+        index = strategy_data["index"],
+        strike_price = strategy_data["strike_price"],
+        expiry = strategy_data["expiry"],
+        option = strategy_data["option"],
+        chart_time = strategy_data["chart_time"],
+    )
+    db.add(order)
+    await db.commit()
 
 async def save_order(order_response: dict, full_order_response: dict, db: Session = Depends(get_db)):
     order = Order(
@@ -45,7 +58,7 @@ async def place_order_mail(db: Session = Depends(get_db)):
                 order.symboltoken, order.signal, order.price, order.status, order.quantity, order.ordertype, order.producttype, order.duration, order.stoploss, order.average_price, order.exchange_order_id, order.transactiontime
             ])
 
-    await send_email_async("New Order Place", "Please check attached file for today's all orders", Envs.USERNAME, "receiver@yopmail.com", csvfile)
+    await send_email_async("New Order Place", "Please check attached file for today's all orders", SMTPEnvs.USERNAME, "receiver@yopmail.com", csvfile)
     return {"message": "Data is retrieved and email sent"}
 
 async def send_email_async(subject, message, sender, receiver, csv_file):
@@ -60,9 +73,9 @@ async def send_email_async(subject, message, sender, receiver, csv_file):
         file_data = f.read()
         msg.add_attachment(file_data, maintype='application', subtype='octet-stream', filename=csv_file)    
     try:
-        client = aiosmtplib.SMTP(hostname=Envs.SERVER, port=int(Envs.PORT))
+        client = aiosmtplib.SMTP(hostname=SMTPEnvs.SERVER, port=int(SMTPEnvs.PORT))
         await client.connect()
-        await client.login(Envs.USERNAME, Envs.PASSWORD)
+        await client.login(SMTPEnvs.USERNAME, SMTPEnvs.PASSWORD)
         await client.send_message(msg)
         await client.quit()
         return True

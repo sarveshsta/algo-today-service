@@ -9,6 +9,12 @@ from core.events import SmartAPIEvent
 from core.redis import PubSubClient
 
 
+# client code to get LTP data
+LTP_API_KEY = "MolOSZTR"
+LTP_CLIENT_CODE = "S55329579"
+LTP_PASSWORD = "4242"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+
 class WSApp:
     def __init__(
         self,
@@ -24,10 +30,8 @@ class WSApp:
         self.pubsub = pubsub
         smart = SmartConnect(api_key=self.api_key)
         data = smart.generateSession(
-            clientCode=client_code,
-            password=password,
-            totp=pyotp.TOTP(token_code).now(),
-        )
+                clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+            )
         auth_token = data["data"]["jwtToken"]
         feed_token = smart.getfeedToken()
 
