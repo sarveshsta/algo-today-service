@@ -22,3 +22,33 @@ class ExpirySchema(BaseModel):
     expiry: str
     class Config:
         from_attributes = True
+
+class StartStrategySchema(BaseModel):
+    user_id: str
+    strategy_id: str
+    index: str
+    strike_price: int
+    expiry: str
+    option: str
+    chart_time: str
+    
+    class Config:
+        from_attributes = True
+        
+class Order(BaseModel):
+    unique_order_id: str
+    symboltoken: str
+    signal: str
+    price: float
+    status: str
+    quantity: str
+    ordertype: str
+    producttype: str
+    duration: str
+    stoploss: float
+    average_price: float
+    exchange_order_id: str
+    transactiontime: int
+
+    class Config:
+        from_attributes = True

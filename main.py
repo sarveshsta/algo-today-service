@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 import uvicorn
-
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import trades.models as trades_models
 import users.models as user_models
@@ -23,6 +24,7 @@ from core.redis import PubSubClient
 from trades import route as trade_route
 from trades.stream import WSApp
 from users import route as user_route
+from trades.strategy import my_strategy as strategy_route
 
 user_models.Base.metadata.create_all(bind=engine)
 trades_models.Base.metadata.create_all(bind=engine)
@@ -81,15 +83,20 @@ app = FastAPI(
 )
 
 
-app.include_router(user_route.router, prefix="/users", tags=["users"])
-app.include_router(trade_route.router, prefix="/tokens", tags=["tokens"])
+app.include_router(user_route.router, prefix="/users", tags=["Users"])
+app.include_router(trade_route.router, prefix="/tokens", tags=["Tokens"])
+app.include_router(strategy_route.router, prefix="/strategy", tags=["Strategy"])
+
+@app.get("/", tags=["Root"])
+async def read_root():
+    return {"message": "Welcome to the API!"}
 
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
     "http://localhost",
-    "http://localhost:3000",
-    "http://15.206.153.177:8000"
+    "http://localhost:5000",
+    "http://15.206.153.177:5000"
 ]
 
 app.add_middleware(
@@ -99,6 +106,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+PORT: int  = 5000
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=5000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
