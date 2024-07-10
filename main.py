@@ -75,8 +75,8 @@ app = FastAPI(
     description="This service is responsible for trading",
     version="0.0.1",
     contact={
-        "name": "Keval",
-        "email": "kevalrajpal2580@gmail.com",
+        "name": "Sarvesh",
+        "email": "sarvesh91199@gmail.com",
     },
     license_info=None,
     lifespan=lifespan,
@@ -91,13 +91,11 @@ app.include_router(strategy_route.router, prefix="/strategy", tags=["Strategy"])
 async def read_root():
     return {"message": "Welcome to the API!"}
 
-origins = [
-    "http://localhost.tiangolo.com",
-    "https://localhost.tiangolo.com",
-    "http://localhost",
-    "http://localhost:5000",
-    "http://15.206.153.177:5000"
-]
+origins = ["localhost:3000",
+           "http://127.0.0.1:3000",
+           "http://localhost:3000",
+           "127.0.0.1:3000"
+    'https://9ffb-2405-201-301d-f063-58bf-34e3-962e-9c6c.ngrok-free.app']
 
 app.add_middleware(
     CORSMiddleware,

@@ -198,9 +198,7 @@ class SmartApiDataProvider(DataProviderInterface):
         return pd.DataFrame(res_json["data"], columns=columns)
 
     def fetch_ltp_data(self, token):
-        print(f"ltp_data token:   {token}")
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
-        print(f"ltp_data:   {ltp_data}")
         return ltp_data
     
     def place_order(self, symbol, token, transaction, price, quantity):
@@ -228,7 +226,7 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.info(f"PlaceOrder : {full_order_response}")
             return order_response, full_order_response
         except Exception as e:
-            print(f"Order placement failed: {e}")
+            logger.info(f"Order placement failed: {e}")
             return False
 
 
@@ -251,7 +249,6 @@ class MaxMinOfLastTwo(IndicatorInterface):
     def check_indicators(self, data: pd.DataFrame, token:str,  ltp_value:float, index: int = 0) -> tuple[Signal, float]:
         ltp = ltp_value
         token = str(token).split(':')[-1]
-        print("TOKEN", token)
         print("DATA:", data[0:15])
         
         # checking for pre buying condition
@@ -262,18 +259,18 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 current_candle = data.iloc[i]
                 previous_candle = data.iloc[i + 1]
 
-                print(f'C{i} => {current_candle[OHLC_1]} H{i+1} => {previous_candle[OHLC_2]}')
+                logger.info(f'C{i} => {current_candle[OHLC_1]} H{i+1} => {previous_candle[OHLC_2]}')
 
                 if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
                     high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 0, -1)]
                     max_high = max(high_values)
-                    print("HIGH VALUES", high_values)
+                    logger.info(f"HIGH VALUES {high_values}")
 
                     self.price = max_high
                     self.trading_price = max_high
                     self.trade_details['index'] = token
 
-                    print("Condition matched", self.price)
+                    logger.info(f"Condition matched  {self.price}")
                     break
 
 
@@ -289,8 +286,8 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.trade_details['index'] = token
 
                 self.trade_details['datetime'] = datetime.now()
-                print("PRE CONDITION PRICE", self.trading_price, "CURRENT LTP", ltp)
-                print("TRADE BOUGHT due to LTP > Price", self.trade_details)
+                logger.info(f"PRE CONDITION PRICE {self.trading_price} CURRENT LTP {ltp}")
+                logger.info(f"TRADE BOUGHT due to LTP > Price {self.trade_details}")
 
                 write_logs("BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}")
 
@@ -306,14 +303,14 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                print("LTP PRICE and Selling self.price", ltp, self.price)
+                logger.info(f"LTP PRICE and Selling self.price {ltp} {self.price}")
 
                 write_logs("SOLD", token, self.price, "Profit", f"LTP > 1.10* buying self.price -> {ltp} > {self.price}")
 
                 self.price = ltp
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                print("TRADE SOLD PROFIT LTP", self.trade_details)
+                logger.info(f"TRADE SOLD PROFIT LTP {self.trade_details}")
 
                 return Signal.SELL, self.price
                 # return Signal.WAITING_TO_SELL, self.price
@@ -324,14 +321,14 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                print("LTP PRICE and Selling self.price", ltp, self.price)
+                logger.info(f"LTP PRICE and Selling self.price {ltp} {self.price}")
 
                 write_logs("SOLD", token, self.price, "Loss", f"LTP < {price_vs_ltp_mulitplier} * buying self.price {self.price}")
 
                 self.price = ltp
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                print("TRADE SOLD LOSS LTP",self.trade_details)
+                logger.info(f"TRADE SOLD LOSS LTP {self.trade_details}")
                 
                 return Signal.SELL, self.price
             
@@ -342,14 +339,14 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 self.to_buy = False
                 self.waiting_for_sell = False
 
-                print("LTP PRICE and Selling self.price", data[selling_OHLC1].iloc[1], self.price)
+                logger.info(f"LTP PRICE and Selling self.price {data[selling_OHLC1].iloc[1]} {self.price}")
 
                 write_logs("SOLD", token, self.price, "Profit", f"Latest made candle High > 1.10*buying self.price -> {data[selling_OHLC1].iloc[1]} > {selling_OHLC1_multiplier} *{self.price}")
 
                 self.price = data[selling_OHLC1].iloc[1]
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                print("TRADE SOLD PROFIT HIGH", self.trade_details)
+                logger.info(f"TRADE SOLD PROFIT HIGH {self.trade_details}")
                 
                 return Signal.SELL, self.price 
             
@@ -360,7 +357,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 self.to_buy = False
                 self.waiting_for_sell = False
-                print("LOW of candle and Selling self.price", data[selling_OHLC2].iloc[1], self.price)
+                logger.info(f"LOW of candle and Selling self.price {data[selling_OHLC2].iloc[1]} {self.price}")
                 self.price = data[selling_OHLC2].iloc[1]
 
 
@@ -368,21 +365,21 @@ class MaxMinOfLastTwo(IndicatorInterface):
 
                 self.trade_details['datetime'] = datetime.now()
                 self.trade_details['index'] = None
-                print("Selling self.price", self.price)
-                print("TRADE SOLD LOSS LOW", self.trade_details)
+                logger.info(f"Selling self.price {self.price}")
+                logger.info(f"TRADE SOLD LOSS LOW {self.trade_details}")
 
                 return Signal.SELL, self.price
             return Signal.WAITING_TO_SELL, self.price
         
         elif not self.to_sell and self.to_buy and not self.waiting_for_buy:
             self.waiting_for_sell = True
-            print("TRADE DETAILS", self.trade_details)
+            logger.info(f"TRADE DETAILS {self.trade_details}")
             return Signal.WAITING_TO_SELL, self.price
         
         else:  
             self.waiting_for_buy = True
             self.trade_details['done'] = False
-            print("TRADE DETAILS", self.trade_details)
+            logger.info(f"TRADE DETAILS {self.trade_details}")
             return Signal.WAITING_TO_BUY, self.price
 
 
@@ -428,7 +425,7 @@ class BaseStrategy:
         try:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-                candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.THREE_MINUTE).value  # Default to "1min"
+                candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.ONE_MINUTE)  # Default to "1min"
                 print("candle_duration: ",candle_duration)
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
                 print("candle_data: ",candle_data)
@@ -495,37 +492,48 @@ class BaseStrategy:
 # Start strategy endpoint
 @router.post("/start_strategy")
 async def start_strategy(strategy: StartStrategySchema):
-    strategy_id = strategy.strategy_id
-    index_and_candle_durations = {
-        f"{strategy.index}{strategy.expiry}{strategy.strike_price}{strategy.option}": strategy.chart_time,
-    }
-
-    if strategy.strategy_id in tasks:
-        raise HTTPException(status_code=400, message="Strategy already running")
-    print("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
-
-    ltp_smart.generateSession(
-        clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-    )
-
     try:
-        smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
-    except Exception as e:
-        return {"message": str(e), "success": True}
+        strategy_id = strategy.strategy_id
+        index_and_candle_durations = {
+            f"{strategy.index}{strategy.expiry}{strategy.strike_price}{strategy.option}": strategy.chart_time,
+        }
+        print("INDEX:DURATION", index_and_candle_durations)
 
-    instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
-    smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
-    max_transactions_indicator = MaxMinOfLastTwo()
-    strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
-    task = asyncio.create_task(strategy.run())
-    await save_strategy(strategy)
-    tasks[strategy_id] = {"task": task, "strategy": strategy}
-    response = {
-        "message": "strategy starts",
-        "success": True,
-        "strategy_id": strategy_id
-    }
-    return response
+        if strategy.strategy_id in tasks:
+            raise HTTPException(status_code=400, message="Strategy already running")
+        logging.info("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
+        logging.info("index_and_candle_durations.values(): ",index_and_candle_durations.values())
+
+        ltp_smart.generateSession(
+            clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+        )
+
+        try:
+            smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+        except Exception as e:
+            return {"message": str(e), "success": True}
+
+        instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
+        smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
+        max_transactions_indicator = MaxMinOfLastTwo()
+        strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
+        task = asyncio.create_task(strategy.run())
+        await save_strategy(strategy)
+        tasks[strategy_id] = {"task": task, "strategy": strategy}
+        response = {
+            "message": "strategy starts",
+            "success": True,
+            "strategy_id": strategy_id
+        }
+        logger.info("Response", response)
+        return response
+    except Exception as exc:
+        logging.info(f"Error in running strategy", exc)
+        response = {
+            "message": f"strategy failed to start, {exc}",
+            "success": False,
+        }
+        return response
 
 # Stop strategy endpoint
 @router.get("/stop_strategy/{strategy_id}")

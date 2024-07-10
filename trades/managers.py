@@ -20,7 +20,7 @@ def delete_all_tokens(db: Session = Depends(get_db)):
 
 def fetch_tokens(db: Session = Depends(get_db)):
     url = NFO_DATA_URL
-    response = requests.get(url)
+    response = requests.get(url, timeout=7)
     data = response.json()
 
     for instrument in data:
