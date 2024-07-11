@@ -492,6 +492,7 @@ class BaseStrategy:
 # Start strategy endpoint
 @router.post("/start_strategy")
 async def start_strategy(strategy: StartStrategySchema):
+    logger.info("DATA RECEIVED", strategy)
     try:
         strategy_id = strategy.strategy_id
         index_and_candle_durations = {

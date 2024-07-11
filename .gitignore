@@ -137,3 +137,4 @@ media/
 pubsub_events.log.*
 trade_env/
 sample.py
+data.json
