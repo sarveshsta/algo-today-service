@@ -97,7 +97,7 @@ class Signal(Enum):
     BUY = 1
     SELL = 2
     WAITING_TO_BUY = 3
-    WAITING_TO_SELL = 4
+    WAITING_TO_SELL =  4
 
 # variables initialisation start
 # index_and_candle_durations = {
@@ -531,7 +531,7 @@ async def start_strategy(strategy: StartStrategySchema):
     except Exception as exc:
         logging.info(f"Error in running strategy", exc)
         response = {
-            "message": f"strategy failed to start, {exc}",
+            "message": f"strategy failed to start, {exc}, ",
             "success": False,
         }
         return response
