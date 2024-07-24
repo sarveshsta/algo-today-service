@@ -13,7 +13,7 @@ import pyotp
 import requests
 from SmartApi import SmartConnect
 from datetime import datetime
-import os
+import os, ast
 from dotenv import load_dotenv
 from trades.strategy.utility import save_order, place_order_mail, save_strategy
 from trades.schema import StartStrategySchema
@@ -149,7 +149,6 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
         self.tokens = tokens or []
 
     def read_instruments(self) -> List[Instrument]:
-        print("self.tokens: ",self.tokens)
         try:
             # Robust error handling to ensure proper data reading
             response = requests.get(self.url)
@@ -396,7 +395,7 @@ class BaseStrategy:
         instrument_reader: InstrumentReaderInterface,
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
-        index_candle_durations: dict[str, CandleDuration],
+        index_candle_durations: Dict[str, str],
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -426,7 +425,7 @@ class BaseStrategy:
         try:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-                candle_duration = self.index_candle_durations.get(instrument.symbol, CandleDuration.ONE_MINUTE)  # Default to "1min"
+                candle_duration = self.index_candle_durations[instrument.symbol]
                 print("candle_duration: ",candle_duration)
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
                 print("candle_data: ",candle_data)
@@ -472,7 +471,7 @@ class BaseStrategy:
     async def run(self):
         await asyncio.gather(
             self.fetch_ltp_data_continuous(),
-            self.process_data(),
+            # self.process_data(),
             self.start()
         )
 
@@ -492,19 +491,19 @@ class BaseStrategy:
 
 # Start strategy endpoint
 @router.post("/start_strategy")
-async def start_strategy(strategy: StartStrategySchema):
+async def start_strategy(strategy_params: StartStrategySchema):
     logger.info("DATA RECEIVED", strategy)
     try:
-        strategy_id = strategy.strategy_id
+        strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {
-            f"{strategy.index}{strategy.expiry}{strategy.strike_price}{strategy.option}": strategy.chart_time,
+            f"{strategy_params.index}{strategy_params.expiry}{strategy_params.strike_price}{strategy_params.option}": strategy_params.chart_time,
         }
-        print("INDEX:DURATION", index_and_candle_durations)
+        # print("INDEX:DURATION", index_and_candle_durations)
 
-        if strategy.strategy_id in tasks:
-            raise HTTPException(status_code=400, message="Strategy already running")
-        logging.info("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
-        logging.info("index_and_candle_durations.values(): ",index_and_candle_durations.values())
+        if strategy_params.strategy_id in tasks:
+            raise HTTPException(status_code=400, detail="Strategy already running")
+        logger.info("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
+        logger.info("index_and_candle_durations.values(): ",index_and_candle_durations.values())
 
         ltp_smart.generateSession(
             clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
@@ -519,9 +518,9 @@ async def start_strategy(strategy: StartStrategySchema):
         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
         max_transactions_indicator = MaxMinOfLastTwo()
         strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
-        task = asyncio.create_task(strategy.run())
-        await save_strategy(strategy)
-        tasks[strategy_id] = {"task": task, "strategy": strategy}
+        task = asyncio.create_task(strategy.run(), name=strategy_id)
+        # await save_strategy(strategy_params)
+        tasks[strategy_id] = task
         response = {
             "message": "strategy starts",
             "success": True,
@@ -530,7 +529,7 @@ async def start_strategy(strategy: StartStrategySchema):
         logger.info("Response", response)
         return response
     except Exception as exc:
-        logging.info(f"Error in running strategy", exc)
+        logger.info(f"Error in running strategy", exc)
         response = {
             "message": f"strategy failed to start, {exc}, ",
             "success": False,
@@ -542,17 +541,19 @@ async def start_strategy(strategy: StartStrategySchema):
 async def stop_strategy(strategy_id):
     try:
         if strategy_id not in tasks:
-            raise HTTPException(status_code=400, message="Strategy not found")
+            raise HTTPException(status_code=400, detail="Strategy not found")
         task_info = tasks[strategy_id]
-        task = task_info['task']
-        task.cancel()
-        await task
+        task_info.cancel()
+        await task_info
     except asyncio.CancelledError:
-        raise HTTPException(status_code=400, message="Strategy Stop")
+        del tasks[strategy_id]
+        raise HTTPException(status_code=200, detail="Strategy Stop")
 
     del tasks[strategy_id]
     return {"message": "Strategy stopped", "success": True}
 
+
+#get all trades with strik prices
 @router.get("/get-margin-calculator")
 def get_all_strike_prices():
     response = requests.get(NFO_DATA_URL)
@@ -560,4 +561,4 @@ def get_all_strike_prices():
     data = response.json()
     with open("data.json", "w") as json_file:
         json.dump(data, json_file, indent=4)
-    return {"message": "Strategy stopped", "success": True}
+    return {"message": "all strike list", "success": True}
