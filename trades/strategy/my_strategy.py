@@ -194,7 +194,7 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
-        
+        logger.info(f"candle data list: {res_json}")
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         logger.info("Candle data fetched")
         df = pd.DataFrame(res_json["data"], columns=columns)
@@ -588,4 +588,13 @@ async def stop_strategy(strategy_id):
         raise HTTPException(status_code=400, message="Strategy Stop")
 
     del tasks[strategy_id]
+    return {"message": "Strategy stopped", "success": True}
+
+@router.get("/get-margin-calculator")
+def get_all_strike_prices():
+    response = requests.get(NFO_DATA_URL)
+    response.raise_for_status()
+    data = response.json()
+    with open("data.json", "w") as json_file:
+        json.dump(data, json_file, indent=4)
     return {"message": "Strategy stopped", "success": True}
