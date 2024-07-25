@@ -172,7 +172,7 @@ class DataProviderInterface:
     def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
-    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_pirce: str) -> pd.DataFrame:
+    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str) -> pd.DataFrame:
         raise NotImplementedError("Subclasses must implement modify_order()")
 
 
@@ -194,7 +194,6 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
-        logger.info(f"candle data list: {res_json}")
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         logger.info("Candle data fetched")
         df = pd.DataFrame(res_json["data"], columns=columns)
@@ -298,6 +297,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
     price = 0
     trading_price = 0
     number_of_candles = 5
+    stop_loss_info = None
     trade_details = {"done": False, "index": None, "datetime": datetime.now()}
 
     # this is our main strategy function
@@ -319,7 +319,6 @@ class MaxMinOfLastTwo(IndicatorInterface):
                 for i in range(1, self.number_of_candles + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
-                    logger.info(f"Substraction {current_candle["High"] - current_candle["Close"]}")
 
 
                     if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
@@ -331,14 +330,15 @@ class MaxMinOfLastTwo(IndicatorInterface):
                         self.trade_details["index"] = token
                         break
 
-                    # elif (8 * (current_candle["High"] - current_candle["Close"])) < (current_candle[i]["High"]- current_candle["Low"]):
+                    # elif (8 * (current_candle['High']-current_candle['Close'])) < (current_candle[i]["High"]- current_candle["Low"]):
                     #     current_candle = data.iloc[i]
                     #     previous_candle = data.iloc[i + 1]
 
                     #     self.price = data.iloc[i]["High"]
                     #     self.trading_price = data.iloc[i]["High"]
                     #     self.trade_details["index"] = token
-                    #     logger.info(f"Condition matched when candle length compared {self.price}")
+                    #     logger.info(f"Condition matched when candle length compared")
+                    #     logger.info(f"Pivot Value {self.price}")
                     #     break
 
             # buying conditions
@@ -359,6 +359,13 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     write_logs(
                         "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
                     )
+
+                    stoploss_1 = (0.95 * self.price)
+                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
+                    logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
+                    final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
+                    self.price = final_stoploss  
 
                     return Signal.BUY, self.price, index_info
                 return Signal.WAITING_TO_BUY, self.price, index_info
@@ -492,6 +499,8 @@ class BaseStrategy:
                     order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, "25"))
                     if full_order_response:
                         global_order_id = order_id
+                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "25", price, price*0.99, order_id))
+
                     logger.info(f"Order Status: {order_id} {full_order_response}")
                     await place_order_mail()
                     await save_order(order_id, full_order_response)
@@ -501,7 +510,7 @@ class BaseStrategy:
                     await place_order_mail()
                     await save_order(order_id, full_order_response)
                 elif signal == Signal.STOPLOSS:
-                    order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "25", price, price*0.99))
+                    order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "25", price, price*0.99, order_id))
                     logger.info(f"Order Status: {order_id} {full_order_response}")
                     await place_order_mail()
                     await save_order(order_id, full_order_response)
