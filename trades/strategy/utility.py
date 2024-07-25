@@ -58,7 +58,7 @@ async def place_order_mail(db: Session = Depends(get_db)):
                 order.symboltoken, order.signal, order.price, order.status, order.quantity, order.ordertype, order.producttype, order.duration, order.stoploss, order.average_price, order.exchange_order_id, order.transactiontime
             ])
 
-    await send_email_async("New Order Place", "Please check attached file for today's all orders", SMTPEnvs.USERNAME, "receiver@yopmail.com", csvfile)
+    await send_email_async("New Order Place", "Please check attached file for today's all orders", SMTPEnvs.USERNAME, "info@algotoday.com", csvfile)
     return {"message": "Data is retrieved and email sent"}
 
 async def send_email_async(subject, message, sender, receiver, csv_file):
