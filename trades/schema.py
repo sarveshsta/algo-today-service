@@ -23,14 +23,20 @@ class ExpirySchema(BaseModel):
     class Config:
         from_attributes = True
 
-class StartStrategySchema(BaseModel):
-    user_id: str
-    strategy_id: str
+class IndexData(BaseModel):
     index: str
     strike_price: int
     expiry: str
     option: str
     chart_time: str
+    
+    class Config:
+        from_attributes = True
+
+class StartStrategySchema(BaseModel):
+    user_id: str
+    strategy_id: str
+    index_list: list[IndexData]
     
     class Config:
         from_attributes = True

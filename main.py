@@ -24,7 +24,7 @@ from core.redis import PubSubClient
 from trades import route as trade_route
 from trades.stream import WSApp
 from users import route as user_route
-from trades.strategy import my_strategy as strategy_route
+from trades.strategy import optimization as strategy_route
 
 user_models.Base.metadata.create_all(bind=engine)
 trades_models.Base.metadata.create_all(bind=engine)
