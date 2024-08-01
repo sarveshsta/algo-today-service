@@ -193,9 +193,11 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
-        logger.info(f"candle data list: {res_json}")
+        print("candle_data response: ",res_json)
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-        return pd.DataFrame(res_json["data"], columns=columns)
+        df = pd.DataFrame(res_json["data"], columns=columns)
+        data = df[::-1].reset_index(drop=True)
+        return data
 
     def fetch_ltp_data(self, token):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
@@ -222,16 +224,18 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.info(f"PlaceOrder : {order_response}")
 
             # Method 2: Place an order and return the full response
-            full_order_response = self.__smart.placeOrderFullResponse(orderparams)
-            logger.info(f"PlaceOrder : {full_order_response}")
-            return order_response, full_order_response
+            order_book = self.__smart.orderBook()
+            for i in order_book['data']:
+                if i['orderid'] == order_id:
+                    return order_id, i
+            return order_id, None
         except Exception as e:
             logger.info(f"Order placement failed: {e}")
             return False
 
 
 class IndicatorInterface:
-    def check_indicators(self, data: pd.DataFrame) -> List[str]:
+    def check_indicators(self, data: pd.DataFrame, passed_token: str, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
         raise NotImplementedError("Subclasses must implement check_indicators()")
 
 # main class of strategy 
@@ -242,11 +246,13 @@ class MaxMinOfLastTwo(IndicatorInterface):
     waiting_for_buy = True
     price = 0
     trading_price = 0
-    number_of_candles = 10
-    trade_details = {"done":False, "index":None, 'datetime':datetime.now()}
-    
+    number_of_candles = 5
+    stop_loss_info = None
+    trade_details = {"success": False, "index": None, "datetime": datetime.now()}
+
     # this is our main strategy function
-    def check_indicators(self, data: pd.DataFrame, token:str,  ltp_value:float, index: int = 0) -> tuple[Signal, float]:
+    def check_indicators(self, data: pd.DataFrame, passed_token: str, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
+        print("TOKENN", passed_token)
         ltp = ltp_value
         token = str(token).split(':')[-1]
         print("DATA:", data[0:15])
@@ -274,9 +280,85 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     break
 
 
-        if not self.to_buy and token == self.trade_details['index']:
-            if ltp < self.price:
-                self.to_buy = True
+                    #     self.price = data.iloc[i]["High"]
+                    #     self.trading_price = data.iloc[i]["High"]
+                    #     self.trade_details["index"] = token
+                    #     logger.info(f"Condition matched when candle length compared")
+                    #     logger.info(f"Pivot Value {self.price}")
+                    #     break
+
+            # buying conditions
+            if not self.to_buy and token == self.trade_details["index"]:
+                if ltp > (1.01 * self.price):
+                    self.to_buy = True
+                    self.waiting_for_sell = True
+
+                    self.to_sell = False
+                    self.waiting_for_buy = False
+                    self.price = ltp
+                    self.trade_details["success"] = True
+                    self.trade_details["index"] = token
+
+                    self.trade_details["datetime"] = datetime.now()
+                    logger.info(f"TRADE BOUGHT due to LTP > Price {self.trade_details}")
+
+                    write_logs(
+                        "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
+                    )
+
+                    stoploss_1 = (0.95 * self.price)
+                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
+                    logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
+                    final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
+                    self.price = round(final_stoploss, 1)  
+
+                    return (Signal.BUY, self.price, index_info)
+                return (Signal.WAITING_TO_BUY, self.price, index_info)
+
+            # selling in profit
+            elif self.to_buy and not self.to_sell and self.waiting_for_sell and self.trade_details["index"] == token:
+                if ltp >= 1.10 * self.price:
+                    self.to_sell = True
+                    self.waiting_for_buy = True
+
+                    self.to_buy = False
+                    self.waiting_for_sell = False
+
+                    write_logs(
+                        "SOLD", token, self.price, "Profit", f"LTP > 1.10* buying self.price -> {ltp} > {self.price}"
+                    )
+
+                    self.price = ltp
+                    self.trade_details["datetime"] = datetime.now()
+                    self.trade_details["index"] = None
+                    logger.info(f"TRADE SOLD PROFIT LTP {self.trade_details}")
+                    return Signal.SELL, self.price, index_info
+
+                stoploss_1 = (0.95 * self.price)
+                stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
+                logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
+                
+                final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
+
+                if final_stoploss < self.price:
+                    # self.to_sell = True
+                    self.stop_loss = True
+                    self.waiting_for_buy = True
+
+                    self.to_buy = False
+                    self.waiting_for_sell = False
+
+                    write_logs(
+                        "ADDED Stop-Loss", token, self.price, "StopLoss", f"LTP < 0.95* buying self.price -> {ltp} > {self.price}"
+                    )
+                    self.trade_details["datetime"] = datetime.now()
+                    self.trade_details["index"] = None
+                    logger.info(f"ADDED STOP LOSS {self.trade_details}")
+                    return (Signal.STOPLOSS, self.price, index_info)
+
+            elif not self.to_sell and self.to_buy and not self.waiting_for_buy:
                 self.waiting_for_sell = True
 
                 self.to_sell = False
@@ -495,10 +577,11 @@ async def start_strategy(strategy_params: StartStrategySchema):
     logger.info("DATA RECEIVED", strategy)
     try:
         strategy_id = strategy_params.strategy_id
-        index_and_candle_durations = {
-            f"{strategy_params.index}{strategy_params.expiry}{strategy_params.strike_price}{strategy_params.option}": strategy_params.chart_time,
-        }
-        # print("INDEX:DURATION", index_and_candle_durations)
+        index_and_candle_durations = {}
+        print("INDEX:DURATION: ", index_and_candle_durations)
+        print("strategy_params.index_list: ", strategy_params.index_list)
+        for index in strategy_params.index_list:
+            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
 
         if strategy_params.strategy_id in tasks:
             raise HTTPException(status_code=400, detail="Strategy already running")
