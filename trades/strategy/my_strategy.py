@@ -375,7 +375,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                         max_high = max(high_values)
                         logger.info(f"HIGH VALUES {high_values}")
 
-                        self.price = max_high
+                        self.price = max_high #pivot value
                         self.trading_price = max_high
                         self.trade_details["index"] = token
 
