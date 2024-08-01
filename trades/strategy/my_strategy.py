@@ -174,6 +174,9 @@ class DataProviderInterface:
     def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str) -> pd.DataFrame:
         raise NotImplementedError("Subclasses must implement modify_order()")
 
+    def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
+        raise NotImplementedError("Subclasses must implement modify_order()")
+
 
 class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
@@ -194,7 +197,6 @@ class SmartApiDataProvider(DataProviderInterface):
         }
         res_json = self.__smart.getCandleData(historic_params)
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-        logger.info("Candle data fetched")
         df = pd.DataFrame(res_json["data"], columns=columns)
         data = df[::-1]
         return data
@@ -279,6 +281,54 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.info(f"Order modification failed: {e}")
             raise ValueError(f"Stop-loss modification failed, reason: {e}")
 
+    def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
+        stoploss_price = round(stoploss_price, 1)
+        limit_price = round(limit_price, 1)
+        try:
+            # Validate parameters
+            if not symbol or not token or not quantity or not stoploss_price or not limit_price:
+                raise ValueError("Missing required parameters")
+
+            try:
+                quantity = int(quantity)
+            except ValueError:
+                raise ValueError("Quantity must be an integer")
+
+            try:
+                stoploss_price = float(stoploss_price)
+                limit_price = float(limit_price)
+            except ValueError:
+                raise ValueError("Stop-loss price and limit price must be numbers")
+
+            # Define stop-loss limit order parameters
+            stoploss_limit_order_params = {
+                "variety": "STOPLOSS",
+                "tradingsymbol": symbol,
+                "symboltoken": token,
+                "transactiontype": "SELL",  # Selling to trigger stop-loss
+                "exchange": "NFO",
+                "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+                "producttype": "INTRADAY",
+                "duration": "DAY",
+                "price": str(limit_price),  # Limit price for SL-L orders
+                "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+                "quantity": str(quantity),
+            }
+
+  
+            # Method 1: Place an order and return the order ID
+            order_id = self.__smart.placeOrder(stoploss_limit_order_params)
+            logger.info(f"ORDER STOPLOSS id : {order_id}")
+
+            # Method 2: Place an order and return the full response
+            order_book = self.__smart.orderBook()['data']
+            for i in order_book:
+                if i['orderid'] == order_id:
+                    return order_id, i
+            return order_id, None
+        except Exception as e:
+            logger.info(f"Stop loss Order place failed: {e}")
+            raise ValueError(f"Stop-loss order failed, reason: {e}")
 
 
 class IndicatorInterface:
@@ -316,17 +366,20 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     self.number_of_candles = len(data) - 2
 
                 for i in range(1, self.number_of_candles + 1):
+                    logger.info("Looking for pivot value")
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
 
-
                     if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
-                        max_high = current_candle["High"]
-                        logger.info(f"Pivot Value {max_high}")
+                        high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 0, -1)]
+                        max_high = max(high_values)
+                        logger.info(f"HIGH VALUES {high_values}")
 
-                        self.price = max_high
+                        self.price = max_high #pivot value
                         self.trading_price = max_high
                         self.trade_details["index"] = token
+
+                        logger.info(f"Condition matched  {self.price}")
                         break
 
                     # elif (8 * (current_candle['High']-current_candle['Close'])) < (current_candle[i]["High"]- current_candle["Low"]):
@@ -364,7 +417,7 @@ class MaxMinOfLastTwo(IndicatorInterface):
                     stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
                     logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
                     final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
-                    self.price = final_stoploss  
+                    self.price = round(final_stoploss, 1)  
 
                     return Signal.BUY, self.price, index_info
                 return Signal.WAITING_TO_BUY, self.price, index_info
@@ -470,7 +523,6 @@ class BaseStrategy:
                 candle_duration = self.index_candle_durations[instrument.symbol]
                 print("candle_duration: ",candle_duration)
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
-                print("candle_data: ",candle_data)
                 if candle_data.empty:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
@@ -494,8 +546,8 @@ class BaseStrategy:
                     order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, "25"))
                     if full_order_response:
                         global_order_id = order_id
-                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "25", price, price*0.99, order_id))
-
+                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], "25", price, (price*0.99)))
+                        logger.info(f"STOPP_LOSS added, order_id")
                     logger.info(f"Order Status: {order_id} {full_order_response}")
                     await place_order_mail()
                     await save_order(order_id, full_order_response)
@@ -525,7 +577,7 @@ class BaseStrategy:
     async def run(self):
         await asyncio.gather(
             self.fetch_ltp_data_continuous(),
-            # self.process_data(),
+            self.process_data(),
             self.start()
         )
 
@@ -545,7 +597,6 @@ class BaseStrategy:
 # Start strategy endpoint
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
-    logger.info("DATA RECEIVED", strategy)
     try:
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {
@@ -555,8 +606,6 @@ async def start_strategy(strategy_params: StartStrategySchema):
 
         if strategy_params.strategy_id in tasks:
             raise HTTPException(status_code=400, detail="Strategy already running")
-        logger.info("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
-        logger.info("index_and_candle_durations.values(): ",index_and_candle_durations.values())
 
         ltp_smart.generateSession(
             clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
