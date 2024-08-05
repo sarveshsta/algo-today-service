@@ -167,7 +167,7 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
 
 
 class DataProviderInterface:
-    def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
+    def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> dict:
         raise NotImplementedError("Subclasses must implement fetch_candle_data()")
 
     def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
@@ -188,7 +188,7 @@ class SmartApiDataProvider(DataProviderInterface):
         self.__smart = smart
         self.__ltpSmart = ltpSmart
 
-    def fetch_candle_data(self, token, interval) -> pd.DataFrame:
+    def fetch_candle_data(self, token, interval):
         to_date = datetime.now()
         from_date = to_date - timedelta(minutes=360)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
@@ -201,10 +201,8 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
-        columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-        df = pd.DataFrame(res_json["data"], columns=columns)
-        data = df[::-1].reset_index(drop=True)
-        return data
+        data = res_json['data'][::-1]
+        return data[:15]
 
     def fetch_ltp_data(self, token):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
@@ -337,7 +335,7 @@ class SmartApiDataProvider(DataProviderInterface):
 
 
 class IndicatorInterface:
-    def check_indicators(self, data: pd.DataFrame, passed_token: str, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
+    def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
         raise NotImplementedError("Subclasses must implement check_indicators()")
 
 
@@ -355,7 +353,7 @@ class MultiIndexStrategy(IndicatorInterface):
     trade_details = {"success": False, "index": None, "datetime": datetime.now()}
 
     # this is our main strategy function
-    def check_indicators(self, data: pd.DataFrame, passed_token: str, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
+    def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
         print("TOKENN", passed_token)
         ltp = ltp_value
 
@@ -490,7 +488,7 @@ class BaseStrategy:
         self.indicator = indicator
         self.index_candle_durations = index_candle_durations
         self.ltp_comparison_interval = 2
-        self.index_candle_data: Dict[str, pd.DataFrame] = {}
+        self.index_candle_data: Dict[str, list] = {}
         self.index_ltp_values: Dict[str, float] = {}
         self.token: Token
         self.stop_event = asyncio.Event()
@@ -504,7 +502,6 @@ class BaseStrategy:
                     logger.error("No 'ltp' key in the LTP response JSON")
                     continue  # Continue to the next instrument
                 self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
-            logger.info(f"LTP Data Updated: {self.index_ltp_values}")
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
 
@@ -513,27 +510,27 @@ class BaseStrategy:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
-                print("candle_duration: ",candle_duration)
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
-                if candle_data.empty:
+                if candle_data is None:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 self.index_candle_data[str(instrument.symbol)] = candle_data
-            logger.info("self.index_candle_data: ",self.index_candle_data)
-        except Exception as e:
-            logger.error(f"An error occurred while fetching candle data: {e}")
+        except logging.exception:
+            logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        for index in list(self.index_candle_data.keys()):
+        for index in list(self.index_ltp_values.keys()):
             while True:
                 await asyncio.sleep(1)
-                if not self.index_candle_data[index].empty and self.index_ltp_values[index] is not None:
-                    latest_candle = self.index_candle_data[index].iloc[1]
+                if (self.index_candle_data[index] and self.index_ltp_values[index]) is not None:
+                    columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
+                    data = pd.DataFrame(self.index_candle_data[index], columns=columns)
+                    latest_candle = data.iloc[1]
                     logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
 
                     # Implement your comparison logic here
                     signal, price, index_info = await async_return(
-                        self.indicator.check_indicators(self.index_candle_data[index], self.token, self.index_ltp_values[index])
+                        self.indicator.check_indicators(data, self.token, self.index_ltp_values[index])
                     )
                     logger.info(f"Signal: {signal}, Price: {price}")
                     if signal == Signal.BUY:
@@ -600,7 +597,6 @@ async def start_strategy(strategy_params: StartStrategySchema):
     try:
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {}
-        print("INDEX:DURATION: ", index_and_candle_durations)
         print("strategy_params.index_list: ", strategy_params.index_list)
         for index in strategy_params.index_list:
             index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
