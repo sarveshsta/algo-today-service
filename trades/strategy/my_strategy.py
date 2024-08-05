@@ -553,7 +553,7 @@ class BaseStrategy:
     async def run(self):
         await asyncio.gather(
             self.fetch_ltp_data_continuous(),
-            # self.process_data(),
+            self.process_data(),
             self.start()
         )
 

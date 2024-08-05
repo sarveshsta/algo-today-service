@@ -201,9 +201,11 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
+        #print(f"DATA_INDEX {res_json}")
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
         df = pd.DataFrame(res_json["data"], columns=columns)
         data = df[::-1].reset_index(drop=True)
+        print(f"DATA_INDEX {data}")
         return data
 
     def fetch_ltp_data(self, token):
@@ -539,28 +541,28 @@ class BaseStrategy:
                     if signal == Signal.BUY:
                         logger.info(f"Order Status: {index_info} {Signal.BUY}")
                         
-                        # order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, "25"))
-                        # if full_order_response:
-                        #     global_order_id = order_id
-                        #     order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], "25", price, (price*0.99)))
-                        #     logger.info(f"STOPP_LOSS added, order_id")
-                        # logger.info(f"Order Status: {order_id} {full_order_response}")
-                        # await place_order_mail()
-                        # await save_order(order_id, full_order_response)
+                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, "75"))
+                        if full_order_response:
+                            global_order_id = order_id
+                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], "75", price, (price*0.99)))
+                            logger.info(f"STOPP_LOSS added, order_id")
+                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        await place_order_mail()
+                        await save_order(order_id, full_order_response)
                     elif signal == Signal.SELL:
                         logger.info(f"Order Status: {index_info} {Signal.SELL}")
 
-                        # order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, "25"))
-                        # logger.info(f"Order Status: {order_id} {full_order_response}")
-                        # await place_order_mail()
-                        # await save_order(order_id, full_order_response)
+                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, "75"))
+                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        await place_order_mail()
+                        await save_order(order_id, full_order_response)
                     elif signal == Signal.STOPLOSS:
                         logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
                         
-                        # order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "25", price, price*0.99, order_id))
-                        # logger.info(f"Order Status: {order_id} {full_order_response}")
-                        # await place_order_mail()
-                        # await save_order(order_id, full_order_response)
+                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "75", price, price*0.99, order_id))
+                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        await place_order_mail()
+                        await save_order(order_id, full_order_response)
                 else:
                     logger.info("Waiting for data...")
 
