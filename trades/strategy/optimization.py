@@ -482,6 +482,7 @@ class BaseStrategy:
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
         index_candle_durations: Dict[str, str],
+        extra_args: dict
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -490,13 +491,16 @@ class BaseStrategy:
         self.ltp_comparison_interval = 2
         self.index_candle_data: Dict[str, list] = {}
         self.index_ltp_values: Dict[str, float] = {}
+        self.token_value: Dict[str, Token] = {}
         self.token: Token
         self.stop_event = asyncio.Event()
+        self.parameters = extra_args
 
     async def fetch_ltp_data(self):
         try:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+                self.token_value[str(instrument.symbol)] = self.token
                 ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
                 if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
                     logger.error("No 'ltp' key in the LTP response JSON")
@@ -523,6 +527,7 @@ class BaseStrategy:
             while True:
                 await asyncio.sleep(1)
                 if (self.index_candle_data[index] and self.index_ltp_values[index]) is not None:
+                    logger.info(f"token: {self.token_value[index]}, quantity: {self.parameters[index]}")
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(self.index_candle_data[index], columns=columns)
                     latest_candle = data.iloc[1]
@@ -530,16 +535,16 @@ class BaseStrategy:
 
                     # Implement your comparison logic here
                     signal, price, index_info = await async_return(
-                        self.indicator.check_indicators(data, self.token, self.index_ltp_values[index])
+                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                     )
                     logger.info(f"Signal: {signal}, Price: {price}")
                     if signal == Signal.BUY:
                         logger.info(f"Order Status: {index_info} {Signal.BUY}")
                         
-                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, "75"))
+                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
                         if full_order_response:
                             global_order_id = order_id
-                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], "75", price, (price*0.99)))
+                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, (price*0.99)))
                             logger.info(f"STOPP_LOSS added, order_id")
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                         await place_order_mail()
@@ -547,14 +552,14 @@ class BaseStrategy:
                     elif signal == Signal.SELL:
                         logger.info(f"Order Status: {index_info} {Signal.SELL}")
 
-                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, "75"))
+                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, self.parameters[index]))
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                         await place_order_mail()
                         await save_order(order_id, full_order_response)
                     elif signal == Signal.STOPLOSS:
                         logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
                         
-                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], "75", price, price*0.99, order_id))
+                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                         await place_order_mail()
                         await save_order(order_id, full_order_response)
@@ -597,9 +602,13 @@ async def start_strategy(strategy_params: StartStrategySchema):
     try:
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {}
+        quantity_index = {}
         print("strategy_params.index_list: ", strategy_params.index_list)
         for index in strategy_params.index_list:
             index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
+
+        for index in strategy_params.index_list:
+            quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
 
         if strategy_params.strategy_id in tasks:
             raise HTTPException(status_code=400, detail="Strategy already running")
@@ -616,7 +625,7 @@ async def start_strategy(strategy_params: StartStrategySchema):
         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
         max_transactions_indicator = MultiIndexStrategy()
-        strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations)
+        strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations, quantity_index)
         task = asyncio.create_task(strategy.run(), name=strategy_id)
         # await save_strategy(strategy_params)
         tasks[strategy_id] = task
