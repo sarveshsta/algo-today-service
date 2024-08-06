@@ -29,6 +29,7 @@ class IndexData(BaseModel):
     expiry: str
     option: str
     chart_time: str
+    quantity: int | None
     
     class Config:
         from_attributes = True
