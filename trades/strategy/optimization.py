@@ -5,8 +5,9 @@ import os
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from urllib.error import URLError
+import copy
 
 import fastapi
 import pandas as pd
@@ -83,6 +84,7 @@ class CandleDuration(Enum):
 # price comparision
 OHLC_1 = "Close"
 OHLC_2 = "High"
+index_candle_data = []
 
 # buying condition comparision
 buying_multiplier = 1.01
@@ -170,7 +172,7 @@ class DataProviderInterface:
     def fetch_candle_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> dict:
         raise NotImplementedError("Subclasses must implement fetch_candle_data()")
 
-    def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> pd.DataFrame:
+    def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> float:
         raise NotImplementedError("Subclasses must implement fetch_ltp_data()")
 
     def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
@@ -489,7 +491,7 @@ class BaseStrategy:
         self.indicator = indicator
         self.index_candle_durations = index_candle_durations
         self.ltp_comparison_interval = 2
-        self.index_candle_data: Dict[str, list] = {}
+        # self.index_candle_data: Dict[str, list] = {}
         self.index_ltp_values: Dict[str, float] = {}
         self.token_value: Dict[str, Token] = {}
         self.token: Token
@@ -506,6 +508,7 @@ class BaseStrategy:
                     logger.error("No 'ltp' key in the LTP response JSON")
                     continue  # Continue to the next instrument
                 self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
+                # logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
 
@@ -515,56 +518,59 @@ class BaseStrategy:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
                 candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
+                # candle_data = async_return(candle_data)
                 if candle_data is None:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
-                self.index_candle_data[str(instrument.symbol)] = candle_data
+                index_candle_data.append((str(instrument.symbol), candle_data))
+                # logger.info(f"candle data: {str(instrument.symbol)}")
+                # logger.info(f"candle data: {self.index_candle_data}")
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        for index in list(self.index_ltp_values.keys()):
-            while True:
-                await asyncio.sleep(1)
-                if (self.index_candle_data[index] and self.index_ltp_values[index]) is not None:
-                    logger.info(f"token: {self.token_value[index]}, quantity: {self.parameters[index]}")
-                    columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-                    data = pd.DataFrame(self.index_candle_data[index], columns=columns)
-                    latest_candle = data.iloc[1]
-                    logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
+        for index, value in index_candle_data:
+            await asyncio.sleep(1)
+            logger.info(f"self.token_value123: {self.token_value}")
+            if (value and self.index_ltp_values[index]) is not None:
+                logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
+                columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
+                data = pd.DataFrame(value, columns=columns)
+                latest_candle = data.iloc[1]
+                logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
 
-                    # Implement your comparison logic here
-                    signal, price, index_info = await async_return(
-                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
-                    )
-                    logger.info(f"Signal: {signal}, Price: {price}")
-                    if signal == Signal.BUY:
-                        logger.info(f"Order Status: {index_info} {Signal.BUY}")
-                        
-                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
-                        if full_order_response:
-                            global_order_id = order_id
-                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, (price*0.99)))
-                            logger.info(f"STOPP_LOSS added, order_id")
-                        logger.info(f"Order Status: {order_id} {full_order_response}")
-                        await place_order_mail()
-                        await save_order(order_id, full_order_response)
-                    elif signal == Signal.SELL:
-                        logger.info(f"Order Status: {index_info} {Signal.SELL}")
+                # Implement your comparison logic here
+                signal, price, index_info = await async_return(
+                    self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
+                )
+                logger.info(f"Signal: {signal}, Price: {price}")
+                if signal == Signal.BUY:
+                    logger.info(f"Order Status: {index_info} {Signal.BUY}")
+                    
+                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
+                    if full_order_response:
+                        global_order_id = order_id
+                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, (price*0.99)))
+                        logger.info(f"STOPP_LOSS added, order_id")
+                    logger.info(f"Order Status: {order_id} {full_order_response}")
+                    await place_order_mail()
+                    await save_order(order_id, full_order_response)
+                elif signal == Signal.SELL:
+                    logger.info(f"Order Status: {index_info} {Signal.SELL}")
 
-                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, self.parameters[index]))
-                        logger.info(f"Order Status: {order_id} {full_order_response}")
-                        await place_order_mail()
-                        await save_order(order_id, full_order_response)
-                    elif signal == Signal.STOPLOSS:
-                        logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
-                        
-                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
-                        logger.info(f"Order Status: {order_id} {full_order_response}")
-                        await place_order_mail()
-                        await save_order(order_id, full_order_response)
-                else:
-                    logger.info("Waiting for data...")
+                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, self.parameters[index]))
+                    logger.info(f"Order Status: {order_id} {full_order_response}")
+                    await place_order_mail()
+                    await save_order(order_id, full_order_response)
+                elif signal == Signal.STOPLOSS:
+                    logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
+                    
+                    order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
+                    logger.info(f"Order Status: {order_id} {full_order_response}")
+                    await place_order_mail()
+                    await save_order(order_id, full_order_response)
+            else:
+                logger.info("Waiting for data...")
 
     async def start(self):
         try:
@@ -579,7 +585,7 @@ class BaseStrategy:
     async def run(self):
         await asyncio.gather(
             self.fetch_ltp_data_continuous(),
-            self.process_data(),
+            self.process_data_continuous(),
             self.start()
         )
 
@@ -591,6 +597,16 @@ class BaseStrategy:
                 await asyncio.sleep(1)  # fetch LTP data every second
         except asyncio.CancelledError:
             logger.info("fetch_ltp_data_continuous task was cancelled")
+            raise
+
+    async def process_data_continuous(self):
+        try:
+            while not self.stop_event.is_set():
+                await self.process_data()
+                logger.info("process_data_continuous continues")
+                await asyncio.sleep(1)  # fetch LTP data every second
+        except asyncio.CancelledError:
+            logger.info("process_data_continuous task was cancelled")
             raise
 
     async def stop(self):
