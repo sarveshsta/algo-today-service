@@ -1,4 +1,5 @@
 import os, csv
+import asyncio
 import aiosmtplib
 from fastapi import Depends
 from trades.models import Order, StrategyValue
@@ -82,3 +83,26 @@ async def send_email_async(subject, message, sender, receiver, csv_file):
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
+    
+
+def async_return(result):
+    obj = asyncio.Future()
+    obj.set_result(result)
+    return obj
+
+
+class SignalTrigger:        
+    async def signal_trigger(self, data_provider, index_info, price, quantity, signal, order_id=None):
+        order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
+        if signal == "BUY":
+            if full_order_response:
+                order_id, full_order_response = await async_return(data_provider.place_stoploss_limit_order(index_info[0], index_info[1], quantity, price, (price*0.99)))
+
+        elif signal == "SELL":
+            order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, quantity))
+
+        elif signal == "STOPLOSS":
+            order_id, full_order_response = await async_return(data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], quantity, price, price*0.99, order_id))
+        await place_order_mail()
+        await save_order(order_id, full_order_response)
+        return order_id

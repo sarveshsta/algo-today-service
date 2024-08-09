@@ -5,58 +5,25 @@ import os
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from urllib.error import URLError
-import copy
 
 import fastapi
 import pandas as pd
-import pyotp
 import requests
 from dotenv import load_dotenv
-from fastapi import HTTPException
 from SmartApi import SmartConnect
 
-from trades.schema import StartStrategySchema
-from trades.strategy.utility import place_order_mail, save_order, save_strategy
+from trades.strategy.utility import SignalTrigger, async_return, buy_signal, place_order_mail, save_order
 
-router = fastapi.APIRouter()
-tasks: Dict[str, asyncio.Task] = {}
-
-load_dotenv()
-# api_key = os.getenv("API_KEY")
-# client_code = os.getenv("CLIENT_CODE")
-# password = os.getenv("PASSWORD")
-# token_code = os.getenv("TOKEN_CODE")
-
-api_key = "T4MHVpXH"
-client_code = "J263557"
-password = "7753"
-token_code = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-
-
-# constant data
-global_order_id = 1111
-# index details
-NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
-OPT_TYPE = "OPTIDX"
-EXCH_TYPE = "NFO"
-
-# client code to get LTP data
-LTP_API_KEY = "MolOSZTR"
-LTP_CLIENT_CODE = "S55329579"
-LTP_PASSWORD = "4242"
-LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 
 # https://pypi.org/project/smartapi-python/
 # objects to get `@smart` candle data and `@ltp_smart`LTP data respectively
-smart = SmartConnect(api_key=api_key)
-ltp_smart = SmartConnect(api_key=LTP_API_KEY)
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+index_candle_data: List[tuple] = []
 
 def write_logs(type, index, price, status, reason):
     log_dir = f"logs/trade/{datetime.today().strftime('%Y-%m-%d')}"
@@ -79,28 +46,6 @@ class CandleDuration(Enum):
     THREE_MINUTE = "THREE_MINUTE"
     FIVE_MINUTE = "FIVE_MINUTE"
     TEN_MINUTE = "TEN_MINUTE"
-
-
-# price comparision
-OHLC_1 = "Close"
-OHLC_2 = "High"
-index_candle_data = []
-
-# buying condition comparision
-buying_multiplier = 1.01
-buying_OHLC = "High"
-
-# selling condition comparision
-trail_ltp_multiplier = 1.12
-price_vs_ltp_mulitplier = 0.95
-
-# stop loss condition
-selling_OHLC1 = "High"
-selling_OHLC1_multiplier = 1.10
-
-selling_OHLC2 = "Low"
-selling_OHLC2_multiplier = 0.95
-# variables initialisation complete
 
 
 class Signal(Enum):
@@ -471,16 +416,12 @@ class MultiIndexStrategy(IndicatorInterface):
             return (None, 0, [])
 
 # to access objects of dataframe and dict kind
-def async_return(result):
-    obj = asyncio.Future()
-    obj.set_result(result)
-    return obj
-
 
 class BaseStrategy:
     def __init__(
         self,
         instrument_reader: InstrumentReaderInterface,
+        signal_trigger: SignalTrigger,
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
         index_candle_durations: Dict[str, str],
@@ -488,10 +429,11 @@ class BaseStrategy:
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
+        self.signal_trigger = signal_trigger
         self.indicator = indicator
         self.index_candle_durations = index_candle_durations
         self.ltp_comparison_interval = 2
-        # self.index_candle_data: Dict[str, list] = {}
+        self.order_id = int
         self.index_ltp_values: Dict[str, float] = {}
         self.token_value: Dict[str, Token] = {}
         self.token: Token
@@ -544,31 +486,8 @@ class BaseStrategy:
                     self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                 )
                 logger.info(f"Signal: {signal}, Price: {price}")
-                if signal == Signal.BUY:
-                    logger.info(f"Order Status: {index_info} {Signal.BUY}")
-                    
-                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
-                    if full_order_response:
-                        global_order_id = order_id
-                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, (price*0.99)))
-                        logger.info(f"STOPP_LOSS added, order_id")
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
-                elif signal == Signal.SELL:
-                    logger.info(f"Order Status: {index_info} {Signal.SELL}")
-
-                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, self.parameters[index]))
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
-                elif signal == Signal.STOPLOSS:
-                    logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
-                    
-                    order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
+                logger.info(f"Signal: {signal}, Price: {price}")
+                self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id)  
             else:
                 logger.info("Waiting for data...")
 
@@ -612,77 +531,3 @@ class BaseStrategy:
     async def stop(self):
         self.stop_event.set()
 
-# Start strategy endpoint
-@router.post("/start_strategy")
-async def start_strategy(strategy_params: StartStrategySchema):
-    try:
-        strategy_id = strategy_params.strategy_id
-        index_and_candle_durations = {}
-        quantity_index = {}
-        print("strategy_params.index_list: ", strategy_params.index_list)
-        for index in strategy_params.index_list:
-            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
-
-        for index in strategy_params.index_list:
-            quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
-
-        if strategy_params.strategy_id in tasks:
-            raise HTTPException(status_code=400, detail="Strategy already running")
-
-        ltp_smart.generateSession(
-            clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-        )
-
-        try:
-            smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
-        except Exception as e:
-            return {"message": str(e), "success": True}
-
-        instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
-        smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
-        max_transactions_indicator = MultiIndexStrategy()
-        strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations, quantity_index)
-        task = asyncio.create_task(strategy.run(), name=strategy_id)
-        # await save_strategy(strategy_params)
-        tasks[strategy_id] = task
-        response = {
-            "message": "strategy starts",
-            "success": True,
-            "strategy_id": strategy_id
-        }
-        logger.info("Response", response)
-        return response
-    except Exception as exc:
-        logger.info(f"Error in running strategy", exc)
-        response = {
-            "message": f"strategy failed to start, {exc}, ",
-            "success": False,
-        }
-        return response
-
-# Stop strategy endpoint
-@router.get("/stop_strategy/{strategy_id}")
-async def stop_strategy(strategy_id):
-    try:
-        if strategy_id not in tasks:
-            raise HTTPException(status_code=400, detail="Strategy not found")
-        task_info = tasks[strategy_id]
-        task_info.cancel()
-        await task_info
-    except asyncio.CancelledError:
-        del tasks[strategy_id]
-        raise HTTPException(status_code=200, detail="Strategy Stop")
-
-    del tasks[strategy_id]
-    return {"message": "Strategy stopped", "success": True}
-
-
-#get all trades with strik prices
-@router.get("/get-margin-calculator")
-def get_all_strike_prices():
-    response = requests.get(NFO_DATA_URL)
-    response.raise_for_status()
-    data = response.json()
-    with open("data.json", "w") as json_file:
-        json.dump(data, json_file, indent=4)
-    return {"message": "all strike list", "success": True}

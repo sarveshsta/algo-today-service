@@ -1,10 +1,16 @@
 import requests
+import asyncio
 from fastapi import Depends
 from sqlalchemy.orm import Session
-
+from typing import Dict, List
 from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
 from trades.models import TokenModel, Order
+from fastapi import HTTPException
+from trades.strategy.optimization import BaseStrategy, MultiIndexStrategy, OpenApiInstrumentReader, SmartApiDataProvider
+from SmartApi import SmartConnect
+
+tasks: Dict[str, asyncio.Task] = {}
 
 
 def get_tokens(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
@@ -80,3 +86,40 @@ def fetch_previous_orders(db: Session = Depends(get_db)):
             for order in orders]
         return response_list
     return None
+
+async def strategy_start(strategy_id: str, index_and_candle_durations: dict, quantity_index: dict):
+    smart = SmartConnect(api_key=api_key)
+    ltp_smart = SmartConnect(api_key=LTP_API_KEY)
+
+
+    ltp_smart.generateSession(
+        clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+    )
+
+    try:
+        smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+    except Exception as e:
+        return {"message": str(e), "success": True}
+
+    instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
+    smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
+    max_transactions_indicator = MultiIndexStrategy()
+    strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations, quantity_index)
+    task = asyncio.create_task(strategy.run(), name=strategy_id)
+    # await save_strategy(strategy_params)
+    tasks[strategy_id] = task
+    return task
+
+async def strategy_stop(strategy_id: str):
+    try:
+        if strategy_id not in tasks:
+            raise HTTPException(status_code=400, detail="Strategy not found")
+        task_info = tasks[strategy_id]
+        task_info.cancel()
+        await task_info
+    except asyncio.CancelledError:
+        del tasks[strategy_id]
+        raise HTTPException(status_code=200, detail="Strategy Stop")
+
+    del tasks[strategy_id]
+
