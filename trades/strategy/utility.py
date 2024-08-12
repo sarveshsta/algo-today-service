@@ -1,4 +1,5 @@
 import os, csv
+import logging
 import asyncio
 import aiosmtplib
 from fastapi import Depends
@@ -8,8 +9,12 @@ from config.database.config import get_db
 from email.message import EmailMessage
 from email.utils import formatdate
 from dotenv import load_dotenv
+from typing import Dict, List
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 class SMTPEnvs:
     USERNAME = os.getenv('USERNAME')
     PASSWORD = os.getenv('PASSWORD')
@@ -91,18 +96,115 @@ def async_return(result):
     return obj
 
 
-class SignalTrigger:        
+class SignalTrigger:
+    def __init__(self, data_provider) -> None:
+        self.data_provider = data_provider
     async def signal_trigger(self, data_provider, index_info, price, quantity, signal, order_id=None):
-        order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
         if signal == "BUY":
-            if full_order_response:
-                order_id, full_order_response = await async_return(data_provider.place_stoploss_limit_order(index_info[0], index_info[1], quantity, price, (price*0.99)))
+            logger.info(f"signal buy")
+            # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
+            # if full_order_response:
+            #     order_id, full_order_response = await async_return(data_provider.place_stoploss_limit_order(index_info[0], index_info[1], quantity, price, (price*0.99)))
 
         elif signal == "SELL":
-            order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, quantity))
+            logger.info(f"signal sell")
+            # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, quantity))
 
         elif signal == "STOPLOSS":
-            order_id, full_order_response = await async_return(data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], quantity, price, price*0.99, order_id))
-        await place_order_mail()
-        await save_order(order_id, full_order_response)
-        return order_id
+            logger.info(f"signal stoploss")
+        #     order_id, full_order_response = await async_return(data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], quantity, price, price*0.99, order_id))
+        # await place_order_mail()
+        # await save_order(order_id, full_order_response)
+        return "order_id"
+
+class FetchCandleLtpValeus:
+    def __init__(self, index_candle_durations, data_provider, instruments, token):
+        self.index_candle_durations = index_candle_durations
+        self.data_provider = data_provider
+        self.instruments = instruments
+        self.gen_token = token
+        self.token_value: Dict[str, token] = {}
+
+    async def fetch_ltp_data(self):
+        index_ltp_values = {str, float}
+        try:
+            for instrument in self.instruments:
+                data = await async_return(ltp_candle_values(self.index_candle_durations, "LTP", instrument, self.data_provider, self.gen_token))
+                if data[f"{str(instrument.symbol)}_sym"] is None:
+                    continue
+                logger.info(f"self.index_ltp_values: {index_ltp_values}")
+                index_ltp_values.update(str(instrument), data[f"{str(instrument.symbol)}_sym"])
+                self.token_value[str(instrument)] = data[f"{str(instrument.symbol)}_token"]
+            return index_ltp_values, self.token_value
+        except Exception as e:
+            logger.error(f"An error occurred while fetching LTP data: {e}")
+
+    async def fetch_candle_data(self):
+        index_candle_data: List[tuple] = []
+
+        # index_candle_data = {str, list}
+        try:
+            for instrument in self.instruments:
+                data = await async_return(ltp_candle_values(self.index_candle_durations, "CANDLE", instrument, self.data_provider, self.gen_token))
+                if data[str(instrument)] is None:
+                    continue
+                logger.info(f"candle data: {index_candle_data}")
+                index_candle_data.append((str(instrument), data[str(instrument)]))
+                self.token_value[str(instrument)] = data[f"{str(instrument.symbol)}_token"]
+            return index_candle_data, self.token_value
+        except logging.exception:
+            logger.error(f"An error occurred while fetching candle data")
+
+
+# class ProcessData:
+#     def __init__(self, index_candle_data, index_ltp_values, token_value, parameters, indicator, signal_trigger, signal, data_provider, fetch_data:FetchCandleLtpValeus):
+#         self.index_candle_data: index_candle_data
+#         self.token_value: token_value
+#         self.parameters: parameters
+#         self.indicator: indicator
+#         self.signal_trigger: signal_trigger
+#         self.index_ltp_values = index_ltp_values
+#         self.signal = signal
+#         self.data_provider = data_provider
+#         self.fetch_data = fetch_data(index_candle_durations, data_provider, instruments, token)
+
+#     async def process_data(self):
+#         for index, value in self.index_candle_data:
+#             await asyncio.sleep(1)
+#             logger.info(f"self.token_value123: {self.token_value}")
+#             self.fetch_data.fetch_candle_data()
+#             if (value and self.index_ltp_values[index]) is not None:
+#                 logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
+#                 columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
+#                 data = pd.DataFrame(value, columns=columns)
+#                 latest_candle = data.iloc[1]
+#                 logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
+
+#                 # Implement your comparison logic here
+#                 signal, price, index_info = await async_return(
+#                     self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
+#                 )
+#                 logger.info(f"Signal: {signal}, Price: {price}")
+#                 if signal in [self.signal.BUY, self.signal.SELL, self.signal.STOPLOSS]:
+#                     self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id)
+#             else:
+#                 logger.info("Waiting for data...")
+
+
+async def ltp_candle_values(index_candle_durations, tradetype, instrument, data_provider, gen_token):
+    data_dict = {}
+    token = gen_token(instrument.exch_seg, instrument.token, instrument.symbol)
+    data_dict[f"{str(instrument.symbol)}_token"] = token
+    if tradetype == "LTP":
+        ltp_data = await async_return(data_provider.fetch_ltp_data(token))
+        if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
+            data_dict[f"{str(instrument.symbol)}_sym"] = None
+        data_dict[f"{str(instrument.symbol)}_sym"] = float(ltp_data["data"]["ltp"])
+    elif tradetype == "CANDLE":
+        candle_duration = index_candle_durations[instrument.symbol]
+        candle_data = await async_return(data_provider.fetch_candle_data(token, interval=candle_duration))
+        # candle_data = async_return(candle_data)
+        if candle_data is None:
+            data_dict[f"{str(instrument.symbol)}_sym"] = None
+        data_dict[f"{str(instrument.symbol)}_sym"] = candle_data
+    return data_dict

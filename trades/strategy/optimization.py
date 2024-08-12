@@ -14,7 +14,7 @@ import requests
 from dotenv import load_dotenv
 from SmartApi import SmartConnect
 
-from trades.strategy.utility import SignalTrigger, async_return, buy_signal, place_order_mail, save_order
+from trades.strategy.utility import async_return, FetchCandleLtpValeus, SignalTrigger
 
 
 # https://pypi.org/project/smartapi-python/
@@ -421,7 +421,6 @@ class BaseStrategy:
     def __init__(
         self,
         instrument_reader: InstrumentReaderInterface,
-        signal_trigger: SignalTrigger,
         data_provider: DataProviderInterface,
         indicator: IndicatorInterface,
         index_candle_durations: Dict[str, str],
@@ -429,53 +428,29 @@ class BaseStrategy:
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
-        self.signal_trigger = signal_trigger
         self.indicator = indicator
         self.index_candle_durations = index_candle_durations
         self.ltp_comparison_interval = 2
         self.order_id = int
+        self.index_candle_data: Dict[str, tuple] = {}
         self.index_ltp_values: Dict[str, float] = {}
         self.token_value: Dict[str, Token] = {}
-        self.token: Token
         self.stop_event = asyncio.Event()
         self.parameters = extra_args
+        self.fetch_candle_ltp = FetchCandleLtpValeus(self.index_candle_durations, self.data_provider, self.instruments, Token)
+        self.signal_trigger = SignalTrigger(self.data_provider)
 
-    async def fetch_ltp_data(self):
-        try:
-            for instrument in self.instruments:
-                self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-                self.token_value[str(instrument.symbol)] = self.token
-                ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
-                if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
-                    logger.error("No 'ltp' key in the LTP response JSON")
-                    continue  # Continue to the next instrument
-                self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
-                # logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
-        except Exception as e:
-            logger.error(f"An error occurred while fetching LTP data: {e}")
 
-    async def fetch_candle_data(self):
-        try:
-            for instrument in self.instruments:
-                self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
-                candle_duration = self.index_candle_durations[instrument.symbol]
-                candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
-                # candle_data = async_return(candle_data)
-                if candle_data is None:
-                    logger.error(f"No candle data returned for {instrument.symbol}")
-                    continue  # Continue to the next instrument
-                index_candle_data.append((str(instrument.symbol), candle_data))
-                # logger.info(f"candle data: {str(instrument.symbol)}")
-                # logger.info(f"candle data: {self.index_candle_data}")
-        except logging.exception:
-            logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        for index, value in index_candle_data:
+        logger.info(f"self.index_candle_data: {self.index_candle_data}")
+        logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
+        for index, value in self.index_candle_data:
             await asyncio.sleep(1)
             logger.info(f"self.token_value123: {self.token_value}")
             if (value and self.index_ltp_values[index]) is not None:
                 logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
+
                 columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                 data = pd.DataFrame(value, columns=columns)
                 latest_candle = data.iloc[1]
@@ -486,32 +461,25 @@ class BaseStrategy:
                     self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                 )
                 logger.info(f"Signal: {signal}, Price: {price}")
-                logger.info(f"Signal: {signal}, Price: {price}")
-                self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id)  
+                if signal in [Signal.BUY, Signal.SELL, Signal.STOPLOSS]:
+                    self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id)  
             else:
                 logger.info("Waiting for data...")
 
-    async def start(self):
+    async def fetch_candle_data_continuous(self):
         try:
             while not self.stop_event.is_set():
-                await self.fetch_candle_data()
+                self.index_candle_data, self.token_value = await async_return(self.fetch_candle_ltp.fetch_candle_data())
                 logger.info("fetch_candle_data continue")
                 await asyncio.sleep(10)  # fetch candle data every 10 seconds
         except asyncio.CancelledError:
             logger.info("start task was cancelled")
             raise
 
-    async def run(self):
-        await asyncio.gather(
-            self.fetch_ltp_data_continuous(),
-            self.process_data_continuous(),
-            self.start()
-        )
-
     async def fetch_ltp_data_continuous(self):
         try:
             while not self.stop_event.is_set():
-                await self.fetch_ltp_data()
+                self.index_ltp_values, self.token_value = await async_return(self.fetch_candle_ltp.fetch_ltp_data())
                 logger.info("fetch_ltp_data_continuous continues")
                 await asyncio.sleep(1)  # fetch LTP data every second
         except asyncio.CancelledError:
@@ -527,6 +495,13 @@ class BaseStrategy:
         except asyncio.CancelledError:
             logger.info("process_data_continuous task was cancelled")
             raise
+
+    async def run(self):
+        await asyncio.gather(
+            self.fetch_ltp_data_continuous(),
+            self.process_data_continuous(),
+            self.fetch_candle_data_continuous()
+        )
 
     async def stop(self):
         self.stop_event.set()

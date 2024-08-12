@@ -1,13 +1,11 @@
 from typing import List
-import asyncio
-import json
 import fastapi
 from fastapi import Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from config.database.config import get_db
 from trades.managers import *
-from trades.schema import ExpirySchema, StartStrategySchema, TokenSchema, Order
+from trades.schema import ExpirySchema, TokenSchema, Order
 import logging
 
 router = fastapi.APIRouter()
@@ -58,52 +56,3 @@ async def get_fetch_previous_orders(db: Session = Depends(get_db)):
 def get_trade_details(db: Session = Depends(get_db)):
     return JSONResponse({"success":True})
 
-
-# Start strategy endpoint
-@router.post("/start_strategy")
-async def start_strategy(strategy_params: StartStrategySchema):
-    try:
-        strategy_id = strategy_params.strategy_id
-        index_and_candle_durations = {}
-        quantity_index = {}
-        logger.info(f"strategy_params.index_list: {strategy_params.index_list}")
-        for index in strategy_params.index_list:
-            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
-            quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
-
-        if strategy_params.strategy_id in tasks:
-            raise HTTPException(status_code=400, detail="Strategy already running")
-        
-        await strategy_start(strategy_id, index_and_candle_durations, quantity_index)
-
-        response = {
-            "message": "strategy starts",
-            "success": True,
-            "strategy_id": strategy_id
-        }
-        logger.info("Response", response)
-        return response
-    except Exception as exc:
-        logger.info(f"Error in running strategy", exc)
-        response = {
-            "message": f"strategy failed to start, {exc}, ",
-            "success": False,
-        }
-        return response
-
-# Stop strategy endpoint
-@router.get("/stop_strategy/{strategy_id}")
-async def stop_strategy(strategy_id):
-    await strategy_stop(strategy_id)
-    return {"message": "Strategy stopped", "success": True}
-
-
-#get all trades with strik prices
-@router.get("/get-margin-calculator")
-def get_all_strike_prices():
-    response = requests.get(NFO_DATA_URL)
-    response.raise_for_status()
-    data = response.json()
-    with open("data.json", "w") as json_file:
-        json.dump(data, json_file, indent=4)
-    return {"message": "all strike list", "success": True}

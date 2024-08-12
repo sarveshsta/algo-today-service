@@ -1,5 +1,6 @@
 import requests
 import asyncio
+import pyotp
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from typing import Dict, List
@@ -9,6 +10,7 @@ from trades.models import TokenModel, Order
 from fastapi import HTTPException
 from trades.strategy.optimization import BaseStrategy, MultiIndexStrategy, OpenApiInstrumentReader, SmartApiDataProvider
 from SmartApi import SmartConnect
+from .strategy.constant import *
 
 tasks: Dict[str, asyncio.Task] = {}
 
