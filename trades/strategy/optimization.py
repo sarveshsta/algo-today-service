@@ -431,7 +431,7 @@ class MultiIndexStrategy(IndicatorInterface):
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
             # modify stop loss conditions
-            if self.to_buy and not self.waiting_for_buy and token == self.trade_details["index"]:
+            if self.to_buy and self.waiting_for_sell and token == self.trade_details["index"]:
                 if ltp > (1.10*self.price):
                     logger.info("Modifying STOPLOSS accroding to the LTP")
                     self.price = ltp
