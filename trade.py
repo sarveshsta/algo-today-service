@@ -36,8 +36,10 @@ ltp_data = ltp_smart.generateSession(
     password=LTP_PASSWORD,
     totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
 )
+
 symbol = 'FINNIFTY13AUG2423200CE'
 token = '44605'
+
 def place_order(symbol, token, price, quantity):
     orderparams ={
             "variety": "NORMAL",
@@ -58,18 +60,21 @@ def place_order(symbol, token, price, quantity):
     return orderId
 
 
-def modify_order(self, variety, symbol, token, transaction, order_type, price, quantity):
+def modify_order(symbol, token, quantity, stoploss_price, limit_price):
     try:
         orderparams ={
             "variety": "NORMAL",
             "tradingsymbol": symbol,
+            "orderid":"240813100563311",
+            "ordertype":"LIMIT",
             "symboltoken": token,
-            "transactiontype": transaction,
+            "transactiontype": "SELL",
             "exchange": "NFO",
             "ordertype": "MARKET",
             "producttype": "INTRADAY",
             "duration": "DAY",
-            "price": price,
+            "price": str(limit_price),
+            "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
             "squareoff": "0",
             "stoploss": "0",
             "quantity": quantity
@@ -115,8 +120,41 @@ def place_stoploss_limit_order(symbol, token, quantity, stoploss_price, limit_pr
             "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
             "quantity": str(quantity),
         }
+        order_id = smart.placeOrder(stoploss_limit_order_params)
+
+        # Method 2: Place an order and return the full response
+        order_book = smart.orderBook()['data']
+        for i in order_book:
+            if i['orderid'] == order_id:
+                return order_id, i
+        return order_id, None    
+    except Exception as e:
+        print(f"Failed stoploss place order, reason {e}")
 
 
-order_id = place_order(symbol, token, "0", "25")
+def modify_order_new_function(symbol, token, stoploss_price, limit_price, order_id, quantity):
+    modify_order = {
+            "orderid": str(order_id),
+            "variety": "STOPLOSS",
+            "tradingsymbol": str(symbol),
+            "symboltoken": str(token),
+            "transactiontype": "SELL",  # Selling to trigger stop-loss
+            "exchange": "NFO",
+            "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+            "producttype": "INTRADAY",
+            "duration": "DAY",
+            "price": str(limit_price),  # Limit price for SL-L orders
+            "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+            "quantity": str(quantity),
+        }
+    # Modify the order
+    response = smart.modifyOrder(modify_order)
 
+    # Check the response
+    if response['status'] == "success":
+        print(f"Order modified successfully. Order ID: {response['data']['orderid']}")
+    else:
+        print(f"Failed to modify the order. Error: {response['message']}")
 
+order_id = modify_order_new_function(symbol, token, 0.50, 0.40, "240813100563311", "25")
+print("SL placed", order_id)

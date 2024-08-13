@@ -181,7 +181,7 @@ class DataProviderInterface:
     def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
-    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str) -> pd.DataFrame:
+    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str):
         raise NotImplementedError("Subclasses must implement modify_order()")
 
     def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
@@ -235,7 +235,7 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.info(f"PlaceOrder id : {order_id}")
 
             # Method 2: Place an order and return the full response
-            order_book = self.__smart.orderBook()
+            order_book = self.__smart.tradeBook()
             for i in order_book['data']:
                 if i['orderid'] == order_id:
                     return order_id, i
@@ -260,27 +260,27 @@ class SmartApiDataProvider(DataProviderInterface):
             except ValueError:
                 raise ValueError("Stop-loss price and limit price must be numbers")
 
-            stoploss_limit_order_params = {
-                "variety": "STOPLOSS",
-                "orderid": order_id,
-                "tradingsymbol": symbol,
-                "symboltoken": token,
-                "transactiontype": "SELL",  # Selling to trigger stop-loss
-                "exchange": "NFO",
-                "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
-                "producttype": "INTRADAY",
-                "duration": "DAY",
-                "price": str(limit_price),  # Limit price for SL-L orders
-                "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
-                "quantity": str(quantity),
-            }
+            modify_sl_order_params = {
+            "orderid": str(order_id),
+            "variety": "STOPLOSS",
+            "tradingsymbol": str(symbol),
+            "symboltoken": str(token),
+            "transactiontype": "SELL",  # Selling to trigger stop-loss
+            "exchange": "NFO",
+            "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+            "producttype": "INTRADAY",
+            "duration": "DAY",
+            "price": str(limit_price),  # Limit price for SL-L orders
+            "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+            "quantity": str(quantity),
+        }
 
             # Method 1: Place an order and return the order ID
-            order_id = self.__smart.modifyOrder(stoploss_limit_order_params)
+            order_id = self.__smart.modifyOrder(modify_sl_order_params)
             logger.info(f"Modify id : {order_id}")
 
             # Method 2: Place an order and return the full response
-            order_book = self.__smart.orderBook()['data']
+            order_book = self.__smart.tradeBook()['data']
             for i in order_book:
                 if i['orderid'] == order_id:
                     return order_id, i
@@ -310,26 +310,26 @@ class SmartApiDataProvider(DataProviderInterface):
 
             # Define stop-loss limit order parameters
             stoploss_limit_order_params = {
-                "variety": "STOPLOSS",
-                "tradingsymbol": str(symbol),
-                "symboltoken": str(token),
-                "transactiontype": "SELL",  # Selling to trigger stop-loss
-                "exchange": "NFO",
-                "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
-                "producttype": "INTRADAY",
-                "duration": "DAY",
-                "price": str(limit_price),  # Limit price for SL-L orders
-                "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
-                "quantity": str(quantity),
-            }
+                    "variety": "STOPLOSS",
+                    "tradingsymbol": str(symbol),
+                    "symboltoken": str(token),
+                    "transactiontype": "SELL",  # Selling to trigger stop-loss
+                    "exchange": "NFO",
+                    "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+                    "producttype": "INTRADAY",
+                    "duration": "DAY",
+                    "price": str(limit_price),  # Limit price for SL-L orders
+                    "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+                    "quantity": str(quantity),
+                }
 
-  
+
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(stoploss_limit_order_params)
             logger.info(f"ORDER STOPLOSS id : {order_id}")
 
             # Method 2: Place an order and return the full response
-            order_book = self.__smart.orderBook()['data']
+            order_book = self.__smart.tradeBook()['data']
             for i in order_book:
                 if i['orderid'] == order_id:
                     return order_id, i
@@ -359,7 +359,6 @@ class MultiIndexStrategy(IndicatorInterface):
 
     # this is our main strategy function
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
-        print("TOKENN", passed_token)
         ltp = ltp_value
 
         token = str(passed_token).split(":")[-1] #this is actually symbol written as FINNIFTY23JUL2423500CE
@@ -432,10 +431,12 @@ class MultiIndexStrategy(IndicatorInterface):
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
             # modify stop loss conditions
-            if ltp > (1.10*self.price):
-                self.price = ltp
-                # modifying the stop loss
-                return Signal.STOPLOSS, self.price, index_info
+            if self.to_buy and not self.waiting_for_buy and token == self.trade_details["index"]:
+                if ltp > (1.10*self.price):
+                    logger.info("Modifying STOPLOSS accroding to the LTP")
+                    self.price = ltp
+                    # modifying the stop loss
+                    return Signal.STOPLOSS, self.price, index_info
             
             else:
                 self.waiting_for_buy = True
@@ -452,7 +453,6 @@ def async_return(result):
     obj = asyncio.Future()
     obj.set_result(result)
     return obj
-
 
 
 class BaseStrategy:
@@ -522,33 +522,29 @@ class BaseStrategy:
                     self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                 )
                 logger.info(f"Signal: {signal}, Price: {price}")
+
                 if signal == Signal.BUY:
                     logger.info(f"Order Status: {index_info} {Signal.BUY}")
                     
                     order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
                     if full_order_response:
                         global_order_id = order_id
-                        price = full_order_response['price']
-                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, (price*0.99)))
-                        
+                        price = full_order_response['fillprice']
+                        logger.info(f"Market price at which we bought is {price}")
+                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price*0.95), (price*0.90)))
                         logger.info(f"STOPP_LOSS added, order_id")
+                        
                     logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
-                elif signal == Signal.SELL:
-                    logger.info(f"Order Status: {index_info} {Signal.SELL}")
+                    # await place_order_mail()
+                    # await save_order(order_id, full_order_response)
 
-                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, self.parameters[index]))
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
                 elif signal == Signal.STOPLOSS:
                     logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
                     
                     order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
                     logger.info(f"Order Status: {order_id} {full_order_response}")
-                    await place_order_mail()
-                    await save_order(order_id, full_order_response)
+                    # await place_order_mail()
+                    # await save_order(order_id, full_order_response)
             else:
                 logger.info("Waiting for data...")
 

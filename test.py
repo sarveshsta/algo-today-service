@@ -116,6 +116,9 @@ def modify_order(self, variety, symbol, token, transaction, order_type, price, q
 #         }
 
 
-# order_id = place_order(symbol, token, "0", "25")
-
+trade_book = smart.tradeBook()['data']
+# print(trade_book)
+for i in trade_book:
+    if i['orderid'] == "240813101157567":
+        print(i)
 
