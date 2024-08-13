@@ -29,7 +29,6 @@ LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 # price comparision
 OHLC_1 = "Close"
 OHLC_2 = "High"
-index_candle_data = []
 
 # buying condition comparision
 buying_multiplier = 1.01

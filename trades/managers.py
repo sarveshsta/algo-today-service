@@ -8,7 +8,8 @@ from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
 from trades.models import TokenModel, Order
 from fastapi import HTTPException
-from trades.strategy.optimization import BaseStrategy, MultiIndexStrategy, OpenApiInstrumentReader, SmartApiDataProvider
+from trades.strategy.optimization import BaseStrategy, OpenApiInstrumentReader, SmartApiDataProvider
+from trades.strategy.multipleIndexStrategy import MultiIndexStrategy
 from SmartApi import SmartConnect
 from .strategy.constant import *
 
