@@ -82,41 +82,40 @@ def modify_order(self, variety, symbol, token, transaction, order_type, price, q
         return False
 
 
-def place_stoploss_limit_order(symbol, token, quantity, stoploss_price, limit_price):
-    stoploss_price = round(stoploss_price, 1)
-    limit_price = round(limit_price, 1)
-    try:
-        # Validate parameters
-        if not symbol or not token or not quantity or not stoploss_price or not limit_price:
-            raise ValueError("Missing required parameters")
+# def place_stoploss_limit_order(symbol, token, quantity, stoploss_price, limit_price):
+#     stoploss_price = round(stoploss_price, 1)
+#     limit_price = round(limit_price, 1)
+#         # Validate parameters
+#         if not symbol or not token or not quantity or not stoploss_price or not limit_price:
+#             raise ValueError("Missing required parameters")
 
-        try:
-            quantity = int(quantity)
-        except ValueError:
-            raise ValueError("Quantity must be an integer")
+#         try:
+#             quantity = int(quantity)
+#         except ValueError:
+#             raise ValueError("Quantity must be an integer")
 
-        try:
-            stoploss_price = float(stoploss_price)
-            limit_price = float(limit_price)
-        except ValueError:
-            raise ValueError("Stop-loss price and limit price must be numbers")
+#         try:
+#             stoploss_price = float(stoploss_price)
+#             limit_price = float(limit_price)
+#         except ValueError:
+#             raise ValueError("Stop-loss price and limit price must be numbers")
 
-        # Define stop-loss limit order parameters
-        stoploss_limit_order_params = {
-            "variety": "STOPLOSS",
-            "tradingsymbol": str(symbol),
-            "symboltoken": str(token),
-            "transactiontype": "SELL",  # Selling to trigger stop-loss
-            "exchange": "NFO",
-            "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
-            "producttype": "INTRADAY",
-            "duration": "DAY",
-            "price": str(limit_price),  # Limit price for SL-L orders
-            "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
-            "quantity": str(quantity),
-        }
+#         # Define stop-loss limit order parameters
+#         stoploss_limit_order_params = {
+#             "variety": "STOPLOSS",
+#             "tradingsymbol": str(symbol),
+#             "symboltoken": str(token),
+#             "transactiontype": "SELL",  # Selling to trigger stop-loss
+#             "exchange": "NFO",
+#             "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+#             "producttype": "INTRADAY",
+#             "duration": "DAY",
+#             "price": str(limit_price),  # Limit price for SL-L orders
+#             "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+#             "quantity": str(quantity),
+#         }
 
 
-order_id = place_order(symbol, token, "0", "25")
+# order_id = place_order(symbol, token, "0", "25")
 
 
