@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 from SmartApi import SmartConnect
-
+from .constant import *
 from trades.strategy.utility import async_return, FetchCandleLtpValeus, SignalTrigger
 
 
@@ -443,11 +443,8 @@ class BaseStrategy:
 
 
     async def process_data(self):
-        logger.info(f"self.index_candle_data: {self.index_candle_data}")
-        logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
         for index, value in self.index_candle_data:
             await asyncio.sleep(1)
-            logger.info(f"self.token_value123: {self.token_value}")
             if (value and self.index_ltp_values[index]) is not None:
                 logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
 

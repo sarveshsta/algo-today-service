@@ -125,33 +125,32 @@ class FetchCandleLtpValeus:
         self.gen_token = token
         self.token_value: Dict[str, token] = {}
 
-    async def fetch_ltp_data(self):
-        index_ltp_values = {str, float}
+    def fetch_ltp_data(self):
+        index_ltp_values: Dict[str, float] = {}
         try:
             for instrument in self.instruments:
-                data = await async_return(ltp_candle_values(self.index_candle_durations, "LTP", instrument, self.data_provider, self.gen_token))
+                data = ltp_candle_values(self.index_candle_durations, "LTP", instrument, self.data_provider, self.gen_token)
                 if data[f"{str(instrument.symbol)}_sym"] is None:
                     continue
-                logger.info(f"self.index_ltp_values: {index_ltp_values}")
-                index_ltp_values.update(str(instrument), data[f"{str(instrument.symbol)}_sym"])
-                self.token_value[str(instrument)] = data[f"{str(instrument.symbol)}_token"]
-            return index_ltp_values, self.token_value
+                index_ltp_values[str(instrument.symbol)] = data[f"{str(instrument.symbol)}_sym"]
+                self.token_value[str(instrument.symbol)] = data[f"{str(instrument.symbol)}_token"]
+                
+            return (index_ltp_values, self.token_value)
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
 
-    async def fetch_candle_data(self):
+    def fetch_candle_data(self):
         index_candle_data: List[tuple] = []
 
         # index_candle_data = {str, list}
         try:
             for instrument in self.instruments:
-                data = await async_return(ltp_candle_values(self.index_candle_durations, "CANDLE", instrument, self.data_provider, self.gen_token))
-                if data[str(instrument)] is None:
+                data = ltp_candle_values(self.index_candle_durations, "CANDLE", instrument, self.data_provider, self.gen_token)
+                if data[f"{str(instrument.symbol)}_sym"] is None:
                     continue
-                logger.info(f"candle data: {index_candle_data}")
-                index_candle_data.append((str(instrument), data[str(instrument)]))
-                self.token_value[str(instrument)] = data[f"{str(instrument.symbol)}_token"]
-            return index_candle_data, self.token_value
+                index_candle_data.append((str(instrument.symbol), data[f"{str(instrument.symbol)}_sym"]))
+                self.token_value[str(instrument.symbol)] = data[f"{str(instrument.symbol)}_token"]
+            return (index_candle_data, self.token_value)
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
@@ -191,18 +190,18 @@ class FetchCandleLtpValeus:
 #                 logger.info("Waiting for data...")
 
 
-async def ltp_candle_values(index_candle_durations, tradetype, instrument, data_provider, gen_token):
+def ltp_candle_values(index_candle_durations, tradetype, instrument, data_provider, gen_token):
     data_dict = {}
     token = gen_token(instrument.exch_seg, instrument.token, instrument.symbol)
     data_dict[f"{str(instrument.symbol)}_token"] = token
     if tradetype == "LTP":
-        ltp_data = await async_return(data_provider.fetch_ltp_data(token))
-        if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
+        ltp_data = data_provider.fetch_ltp_data(token)
+        if "data" not in ltp_data.keys():
             data_dict[f"{str(instrument.symbol)}_sym"] = None
         data_dict[f"{str(instrument.symbol)}_sym"] = float(ltp_data["data"]["ltp"])
     elif tradetype == "CANDLE":
         candle_duration = index_candle_durations[instrument.symbol]
-        candle_data = await async_return(data_provider.fetch_candle_data(token, interval=candle_duration))
+        candle_data = data_provider.fetch_candle_data(token, interval=candle_duration)
         # candle_data = async_return(candle_data)
         if candle_data is None:
             data_dict[f"{str(instrument.symbol)}_sym"] = None
