@@ -437,6 +437,7 @@ class MultiIndexStrategy(IndicatorInterface):
                     self.price = ltp
                     # modifying the stop loss
                     return Signal.STOPLOSS, self.price, index_info
+                elif 
             
             else:
                 self.waiting_for_buy = True
@@ -507,46 +508,52 @@ class BaseStrategy:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        for index, value in index_candle_data:
-            await asyncio.sleep(1)
-            logger.info(f"self.token_value123: {self.token_value}")
-            if (value and self.index_ltp_values[index]) is not None:
-                logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
-                columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-                data = pd.DataFrame(value, columns=columns)
-                latest_candle = data.iloc[1]
-                logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
+        try:
+            for index, value in index_candle_data:
+                await asyncio.sleep(1)
+                logger.info(f"self.token_value123: {self.token_value}")
+                if (value and self.index_ltp_values[index]) is not None:
+                    logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
+                    columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
+                    data = pd.DataFrame(value, columns=columns)
+                    latest_candle = data.iloc[1]
+                    logger.info(f"Comparing LTP {self.index_ltp_values[index]} with latest candle high {latest_candle['High']}")
 
-                # Implement your comparison logic here
-                signal, price, index_info = await async_return(
-                    self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
-                )
-                logger.info(f"Signal: {signal}, Price: {price}")
+                    # Implement your comparison logic here
+                    signal, price, index_info = await async_return(
+                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
+                    )
+                    logger.info(f"Signal: {signal}, Price: {price}")
 
-                if signal == Signal.BUY:
-                    logger.info(f"Order Status: {index_info} {Signal.BUY}")
-                    
-                    order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
-                    if full_order_response:
-                        global_order_id = order_id
-                        price = full_order_response['fillprice']
-                        logger.info(f"Market price at which we bought is {price}")
-                        order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price*0.95), (price*0.90)))
-                        logger.info(f"STOPP_LOSS added, order_id")
+                    if signal == Signal.BUY:
+                        logger.info(f"Order Status: {index_info} {Signal.BUY}")
+
+                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
+                        if full_order_response:
+                            global_order_id = order_id
+                            price = full_order_response['fillprice']
+                            self.indicator.price = price
+
+                            logger.info(f"Market price at which we bought is {price}")
+                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price*0.95), (price*0.90)))
+                            logger.info(f"STOPP_LOSS added, order_id")
+                            
+                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        # await place_order_mail()
+                        # await save_order(order_id, full_order_response)
+
+                    elif signal == Signal.STOPLOSS:
+                        logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
                         
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    # await place_order_mail()
-                    # await save_order(order_id, full_order_response)
-
-                elif signal == Signal.STOPLOSS:
-                    logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
-                    
-                    order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
-                    logger.info(f"Order Status: {order_id} {full_order_response}")
-                    # await place_order_mail()
-                    # await save_order(order_id, full_order_response)
-            else:
-                logger.info("Waiting for data...")
+                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
+                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        # await place_order_mail()
+                        # await save_order(order_id, full_order_response)
+                else:
+                    logger.info("Waiting for data...")
+        except Exception as e:
+            logger.info(f"Error while calling process_data {str(e)}")
+            raise
 
     async def start(self):
         try:
