@@ -262,10 +262,10 @@ class SmartApiDataProvider(DataProviderInterface):
 
             modify_sl_order_params = {
             "orderid": str(order_id),
-            "variety": "MODIFY",
+            "variety": "STOPLOSS",
             "tradingsymbol": str(symbol),
             "symboltoken": str(token),
-            "transactiontype": "MODIFY",  # Selling to trigger stop-loss
+            "transactiontype": "SELL",  # Selling to trigger stop-loss
             "exchange": "NFO",
             "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
             "producttype": "INTRADAY",
@@ -310,10 +310,10 @@ class SmartApiDataProvider(DataProviderInterface):
 
             # Define stop-loss limit order parameters
             stoploss_limit_order_params = {
-                    "variety": "MODIFY",
+                    "variety": "STOPLOSS",
                     "tradingsymbol": str(symbol),
                     "symboltoken": str(token),
-                    "transactiontype": "MODIFY",  # Selling to trigger stop-loss
+                    "transactiontype": "SELL",  # Selling to trigger stop-loss
                     "exchange": "NFO",
                     "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
                     "producttype": "INTRADAY",
