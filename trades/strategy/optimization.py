@@ -388,7 +388,7 @@ class MultiIndexStrategy(IndicatorInterface):
                         logger.info(f"Condition matched  {self.price}")
                         break
 
-                    elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(current_candle["High"]) - float(current_candle["Low"])):
+                    elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
                         logger.info("New condition in check") 
                         
                         # No need to reassign current_candle and previous_candle here since it's already done above.
