@@ -432,12 +432,11 @@ class MultiIndexStrategy(IndicatorInterface):
 
             # modify stop loss conditions
             if self.to_buy and self.waiting_for_sell and token == self.trade_details["index"]:
-                if ltp > (1.10*self.price):
+                if ltp > (1.20*self.price):
                     logger.info("Modifying STOPLOSS accroding to the LTP")
                     self.price = ltp
                     # modifying the stop loss
                     return Signal.STOPLOSS, self.price, index_info
-                elif 
             
             else:
                 self.waiting_for_buy = True
@@ -532,7 +531,7 @@ class BaseStrategy:
                         if full_order_response:
                             global_order_id = order_id
                             price = full_order_response['fillprice']
-                            self.indicator.price = price
+                            buying_price = price
 
                             logger.info(f"Market price at which we bought is {price}")
                             order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price*0.95), (price*0.90)))
@@ -545,7 +544,10 @@ class BaseStrategy:
                     elif signal == Signal.STOPLOSS:
                         logger.info(f"Order Status: {index_info} {Signal.STOPLOSS}")
                         
-                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], price, price*0.99, order_id))
+                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (buying_price*1.18), (buying_price*1.15), order_id))
+                        global_order_id = order_id
+                        price = full_order_response['fillprice']
+                        buying_price = price
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                         # await place_order_mail()
                         # await save_order(order_id, full_order_response)
