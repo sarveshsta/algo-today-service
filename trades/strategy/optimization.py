@@ -403,7 +403,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
-                if  ltp > (1.01 * self.price):
+                if  ltp > (1.01 * self.price) or ltp < (1.01 * self.price):
                     self.to_buy = True
                     self.waiting_to_modify = True
 
