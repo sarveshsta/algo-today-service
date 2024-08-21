@@ -439,7 +439,7 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.trading_price = current_candle["High"]
                         self.trade_details["index"] = token
                         break
-                    logger.info(f"Pivot Value {self.price}")
+                    logger.info(f"Pivot Value {self.price} at {token}")
                 
 
             # buying conditions
