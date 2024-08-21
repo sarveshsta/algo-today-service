@@ -223,10 +223,13 @@ class DataProviderInterface:
         raise NotImplementedError("Subclasses must implement place_order()")
 
     def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str):
-        raise NotImplementedError("Subclasses must implement modify_order()")
+        raise NotImplementedError("Subclasses must implement modify_stoploss_limit_order()")
 
     def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
-        raise NotImplementedError("Subclasses must implement modify_order()")
+        raise NotImplementedError("Subclasses must implement place_stoploss_limit_order()")
+    
+    def check_order_status(self, uniqueOrderId=None):
+        raise NotImplementedError("Subclasses must implement check_order_status()")
 
 
 class SmartApiDataProvider(DataProviderInterface):
@@ -385,6 +388,16 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.info(f"Stop loss Order place failed: {e}")
             raise ValueError(f"Stop-loss order failed, reason: {e}")
 
+    def check_order_status(self, uniqueOrderId=None):
+        if not uniqueOrderId:
+            return ""
+        try:
+            order_details = self.__smart.individual_order_details(uniqueOrderId)
+            logger.info(f"order_details: {order_details}")
+            return order_details['data']['status'], order_details['data']['text']
+        except Exception as e:
+            logger.error(f"Individual order status failed due to {e}")
+
 
 class IndicatorInterface:
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
@@ -519,6 +532,7 @@ class BaseStrategy:
         self.token: Token
         self.stop_event = asyncio.Event()
         self.parameters = extra_args
+        self.uniqueOrderId: str
 
     async def fetch_ltp_data(self):
         try:
@@ -564,6 +578,8 @@ class BaseStrategy:
                     )
                     logger.info(f"Signal: {signal} at Price: {price} in {index[0]}")
 
+                    order_status, text = await async_return(self.data_provider.check_order_status(self.uniqueOrderId))
+                    logger.info(f"order_status: {order_status}, message: {text}")
                     if signal == Signal.BUY:
                         logger.info(f"Order Status: {index_info} {Signal.BUY}")
 
@@ -571,16 +587,19 @@ class BaseStrategy:
                         global_order_id = order_id
                         price = full_order_response['fillprice']
                         global_buying_price = float(price)
+                        self.uniqueOrderId = full_order_response['uniqueorderid']
                         logger.info(f"we got buyingg price at {global_buying_price}")
                         if order_id:
                             logger.info(f"Market price at which we bought is {price}")
                             order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (global_buying_price*0.90), (global_buying_price*0.85)))
+                            self.uniqueOrderId = full_order_response['uniqueorderid']
                             logger.info(f"STOPP_LOSS added, order_id")
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                     elif signal == Signal.MODIFY:
                         logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
                         order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (global_buying_price * 1.18), (global_buying_price * 1.15) , global_order_id))
                         global_order_id = order_id
+                        self.uniqueOrderId = full_order_response['uniqueorderid']
                         logger.info(f"Order Status: {order_id} {full_order_response}")
                 else:
                     logger.info("Waiting for data...")
