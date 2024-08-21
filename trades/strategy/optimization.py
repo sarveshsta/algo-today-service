@@ -56,11 +56,11 @@ class Constants:
         self.SELLING_OHLC1_MULTIPLIER = 1.10
         self.SELLING_OHLC2 = "Low"
         self.SELLING_OHLC2_MULTIPLIER = 0.95
-        self.PLACE_STOPLOSS_STOP_LOSS_PRICE = price*0.20
-        self.PLACE_STOPLOSS_STOP_LIMIT_PRICE = price*0.20 
-        # self.MODIFY_STOPLOSS_STOP_LOSS_PRICE = 
-        # self.MODIFY_STOPLOSS_STOP_LIMIT_PRICE = 
-        # self.MODIFY_STOPLOSS_STOP_ORDER_ID = 
+        self.PLACE_STOPLOSS_STOP_LOSS_PRICE = 0.20
+        self.PLACE_STOPLOSS_STOP_LIMIT_PRICE = 0.20 
+        self.MODIFY_STOPLOSS_STOP_LOSS_PRICE = 1.18
+        self.MODIFY_STOPLOSS_STOP_LIMIT_PRICE = 1.15
+        
         
 # client code to get LTP data
 LTP_API_KEY = "MolOSZTR"
