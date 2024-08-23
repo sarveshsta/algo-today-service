@@ -265,7 +265,7 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__smart.tradeBook()['data']
+                order_book = self.__ltpSmart.tradeBook()['data']
                 for i in order_book:
                     if i['orderid'] == order_id:
                         return order_id, i
@@ -277,7 +277,7 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__smart.orderBook()['data']
+                order_book = self.__ltpSmart.orderBook()['data']
                 for i in order_book:
                     if i['orderid'] == order_id:
                         return order_id, i
@@ -617,7 +617,7 @@ class BaseStrategy:
                             logger.info(f"Market price at which we bought is {price}")
                             self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
                             self.indicator.stop_loss_price = self.indicator.price * 0.95
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(10)
                             self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                             self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                             logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
