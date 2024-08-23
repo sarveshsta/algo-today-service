@@ -509,7 +509,7 @@ class MultiIndexStrategy(IndicatorInterface):
                     self.price = ltp
                     # modifying the stop loss
                     return (Signal.MODIFY, self.price, index_info)
-                elif (data.iloc[1]["Low"] * 0.60) > self.stop_loss_price:
+                elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
                     logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
                     self.price = self.stop_loss_price
                     # modifying the stop loss
