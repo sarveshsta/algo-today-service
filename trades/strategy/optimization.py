@@ -16,7 +16,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from SmartApi import SmartConnect
-
+from time import sleep
 from trades.schema import StartStrategySchema
 from trades.strategy.utility import place_order_mail, save_order, save_strategy
 
@@ -35,7 +35,6 @@ class Constants:
         self.CLIENT_CODE = "J263557"
         self.PASSWORD = "7753"
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-        self.GLOBAL_ORDER_ID = 1111
         self.TRADE_DETAILS = {"success": False, "index": None, "datetime": datetime.now()}
         self.PRICE = 0.0
         self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -76,10 +75,9 @@ token_code = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
 
 
 # constant data
-global_order_id = 1111
+# global_order_id = 1111
 global_buying_price = 0
-trade_details = {"success": False, "index": None, "datetime": datetime.now()}
-price = 0.0
+price = 0.4
 
 # index details
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -222,7 +220,7 @@ class DataProviderInterface:
     def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
-    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price: str, limit_price: str, order_id: str):
+    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price:float, limit_price:float, order_id: str):
         raise NotImplementedError("Subclasses must implement modify_stoploss_limit_order()")
 
     def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
@@ -231,6 +229,12 @@ class DataProviderInterface:
     def check_order_status(self, uniqueOrderId=None):
         raise NotImplementedError("Subclasses must implement check_order_status()")
 
+    def get_trade_book(self, order_id):
+        raise NotImplementedError("Subclasses must implement get_trade_boo()")
+         
+    def get_order_book(self, order_id):
+        raise NotImplementedError("Subclasses must implement get_order_book()")
+        
 
 class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
@@ -257,6 +261,30 @@ class SmartApiDataProvider(DataProviderInterface):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
         return ltp_data
 
+    def get_trade_book(self, order_id):
+        sleep(3)
+        while True:
+            try:
+                order_book = self.__smart.tradeBook()['data']
+                for i in order_book:
+                    if i['orderid'] == order_id:
+                        return order_id, i
+            except Exception as e:
+                sleep(5)
+                logger.info(f"Could not fetch the order_book: {str(e)}")
+
+    def get_order_book(self, order_id):
+        sleep(3)
+        while True:
+            try:
+                order_book = self.__smart.orderBook()['data']
+                for i in order_book:
+                    if i['orderid'] == order_id:
+                        return order_id, i
+            except Exception as e:
+                sleep(5)
+                logger.info(f"Could not fetch the order_book: {str(e)}")
+                
     def place_order(self, symbol, token, transaction, ordertype, price, quantity):
         if ordertype == "MARKET": price="0"
         try:
@@ -277,15 +305,11 @@ class SmartApiDataProvider(DataProviderInterface):
             }
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(orderparams)
+            sleep(2)
             logger.info(f"PlaceOrder id : {order_id} ")
-            global_order_id = order_id
-            # Method 2: Place an order and return the full response
-            order_book = self.__smart.tradeBook()['data'] + self.__smart.orderBook()['data']
-            for i in order_book:
-                if i['orderid'] == order_id:
-                    logger.info(f"returning i and orderid")
-                    return order_id, i
-                
+            sleep(1)
+            order_id, i = self.get_trade_book(order_id=order_id)
+            return order_id, i
         except Exception as e:
             logger.info(f"Order placement failed: {e}")
             raise ValueError(f"Stop-loss placing failed, reason: {e}")
@@ -327,14 +351,9 @@ class SmartApiDataProvider(DataProviderInterface):
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.modifyOrder(modify_sl_order_params)
             logger.info(f"ORDER MODIFY ID : {order_id}")
-
-            # Method 2: Place an order and return the full response
-            order_book = self.__smart.tradeBook()['data'] + self.__smart.orderBook()['data']
-            for i in order_book:
-                if i['orderid'] == order_id:
-                    logger.info("returning order_id and i after modifying stoploss")
-                    return order_id, i
-            return order_id, None
+            sleep(2)
+            order_id, i = self.get_trade_book(order_id=order_id)
+            return order_id, i
         except Exception as e:
             logger.info(f"Order modification failed: {e}")
             raise ValueError(f"Stop-loss modification failed, reason: {e}")
@@ -376,19 +395,14 @@ class SmartApiDataProvider(DataProviderInterface):
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(stoploss_limit_order_params)
             logger.info(f"STOPLOSS ID: {order_id}")
-
-            # Method 2: Place an order and return the full response
-            order_book = self.__smart.tradeBook()['data'] + self.__smart.orderBook()['data']
-            for i in order_book:
-                if i['orderid'] == order_id:
-                    logger.info('returning order_id and i after placing stop loss')
-                    return order_id, i
-            return order_id, None
+            sleep(3)
+            order_id, i = self.get_trade_book(order_id=order_id)
+            return order_id, i
         except Exception as e:
             logger.info(f"Stop loss Order place failed: {e}")
             raise ValueError(f"Stop-loss order failed, reason: {e}")
 
-    def check_order_status(self, uniqueOrderId=None):
+    def check_order_status(self, uniqueOrderId):
         if not uniqueOrderId:
             return ""
         try:
@@ -398,7 +412,7 @@ class SmartApiDataProvider(DataProviderInterface):
         except Exception as e:
             logger.error(f"Individual order status failed due to {e}")
 
-
+    
 class IndicatorInterface:
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
         raise NotImplementedError("Subclasses must implement check_indicators()")
@@ -406,16 +420,19 @@ class IndicatorInterface:
 
 # main class of strategy
 class MultiIndexStrategy(IndicatorInterface):
-    to_buy = False
-    to_modify = False
-    waiting_to_modify = False 
-    waiting_for_buy = True
-    stop_loss = False
-    price = 0
-    trading_price = 0
-    number_of_candles = 5
-    stop_loss_info = None
-    trade_details = trade_details
+    def __init__(self):
+        self.to_buy = False
+        self.to_modify = False
+        self.waiting_to_modify = False 
+        self.waiting_for_buy = True
+        self.stop_loss_price = 0.0
+        self.price = 0.0
+        self.trading_price = 0
+        self.number_of_candles = 5
+        self.stop_loss_info = None
+        self.order_id = "000000000000"
+        self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
 
     # this is our main strategy function
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
@@ -425,12 +442,14 @@ class MultiIndexStrategy(IndicatorInterface):
         symbol_token = str(passed_token).split(":")[1] #a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token]
         logger.info(f"Current LTP of {token} is {ltp}")
+        
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
                 if self.number_of_candles > len(data) - 2:
                     self.number_of_candles = len(data) - 2
 
+                logger.info("Finding pivot value")
                 for i in range(1, self.number_of_candles + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
@@ -444,6 +463,7 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.price = max_high
                         self.trading_price = max_high
                         self.trade_details["index"] = token
+                        logger.info(f"Pivot Value {self.price} at {token}")
                         break
 
                     elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
@@ -451,8 +471,9 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.price = current_candle["High"]
                         self.trading_price = current_candle["High"]
                         self.trade_details["index"] = token
+                        logger.info(f"Pivot Value {self.price} at {token}")
                         break
-                    logger.info(f"Pivot Value {self.price} at {token}")
+                
                 
 
             # buying conditions
@@ -482,20 +503,25 @@ class MultiIndexStrategy(IndicatorInterface):
                     return (Signal.BUY, self.price, index_info)
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
-
             # modify stop loss conditions
             elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
                 if ltp > (self.price*1.20):
+                    logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
                     self.price = ltp
                     # modifying the stop loss
                     return (Signal.MODIFY, self.price, index_info)
-                return Signal.WAITING_TO_MODIFY, self.price, index_info 
+                elif (data.iloc[1]["Low"] * 0.60) > self.stop_loss_price:
+                    logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
+                    self.price = self.stop_loss_price
+                    # modifying the stop loss
+                    return (Signal.MODIFY, self.price, index_info)
+                else:
+                    return (Signal.WAITING_TO_MODIFY, self.price, index_info) 
 
             elif not self.to_modify and self.to_buy and not self.waiting_for_buy:
                 self.waiting_to_modify = True
-                return Signal.WAITING_TO_MODIFY, self.price, index_info
+                return (Signal.WAITING_TO_MODIFY, self.price, index_info)
             
-
             else:
                 self.waiting_for_buy = True
                 self.trade_details["success"] = False
@@ -517,7 +543,7 @@ class BaseStrategy:
         self,
         instrument_reader: InstrumentReaderInterface,
         data_provider: DataProviderInterface,
-        indicator: IndicatorInterface,
+        indicator: MultiIndexStrategy,
         index_candle_durations: Dict[str, str],
         extra_args: dict
     ):
@@ -532,7 +558,6 @@ class BaseStrategy:
         self.token: Token
         self.stop_event = asyncio.Event()
         self.parameters = extra_args
-        self.uniqueOrderId: str
 
     async def fetch_ltp_data(self):
         try:
@@ -573,34 +598,53 @@ class BaseStrategy:
                     latest_candle = data.iloc[1]
 
                     # Implement your comparison logic here
-                    signal, price, index_info = await async_return(
+                    signal, price_returned, index_info = await async_return(
                         self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                     )
-                    logger.info(f"Signal: {signal} at Price: {price} in {index[0]}")
+                    logger.info(f"Signal: {signal} at Price: {price_returned} in {index_info[0]}")
 
-                    order_status, text = await async_return(self.data_provider.check_order_status(self.uniqueOrderId))
-                    logger.info(f"order_status: {order_status}, message: {text}")
                     if signal == Signal.BUY:
                         logger.info(f"Order Status: {index_info} {Signal.BUY}")
 
-                        order_id, full_order_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, self.parameters[index]))
-                        global_order_id = order_id
-                        price = full_order_response['fillprice']
-                        global_buying_price = float(price)
-                        self.uniqueOrderId = full_order_response['uniqueorderid']
-                        logger.info(f"we got buyingg price at {global_buying_price}")
-                        if order_id:
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        
+                        self.indicator.price = float(trade_book_full_response['fillprice'])
+
+                        self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                        self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                        
+                        logger.info(f"we got buying price at {self.indicator.price}")
+                        
+                        if self.indicator.order_id:
                             logger.info(f"Market price at which we bought is {price}")
-                            order_id, full_order_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (global_buying_price*0.90), (global_buying_price*0.85)))
-                            self.uniqueOrderId = full_order_response['uniqueorderid']
-                            logger.info(f"STOPP_LOSS added, order_id")
-                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                            self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.70), (self.indicator.price*0.65)))
+                            self.indicator.stop_loss_price = self.indicator.price * 0.70
+                            
+                            self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                            self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                            logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
+                        
+                        logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
+                    
                     elif signal == Signal.MODIFY:
                         logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
-                        order_id, full_order_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (global_buying_price * 1.18), (global_buying_price * 1.15) , global_order_id))
-                        global_order_id = order_id
-                        self.uniqueOrderId = full_order_response['uniqueorderid']
-                        logger.info(f"Order Status: {order_id} {full_order_response}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
+                        
+                        self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                        self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                        
+                        logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
+                    
+                    if not self.indicator.waiting_for_buy:
+                        order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
+                        logger.info(f"order_status: {order_status}, message: {text}")
+
+                        if order_status.lower() == 'complete':
+                            self.indicator.waiting_for_buy = True
+                            self.indicator.to_buy = False
+                            self.indicator.to_modify = False
+                            self.indicator.waiting_to_modify = False
+                            logger.info("Stop-loss has been triggered")
                 else:
                     logger.info("Waiting for data...")
         except Exception as e:
@@ -720,3 +764,4 @@ def get_all_strike_prices():
     with open("data.json", "w") as json_file:
         json.dump(data, json_file, indent=4)
     return {"message": "all strike list", "success": True}
+ 

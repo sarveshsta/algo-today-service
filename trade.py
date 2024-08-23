@@ -37,8 +37,8 @@ ltp_data = ltp_smart.generateSession(
     totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
 )
 
-symbol = 'FINNIFTY13AUG2423200CE'
-token = '44605'
+symbol = 'NIFTY22AUG2424900CE'
+token = '36792'
 
 def place_order(symbol, token, price, quantity):
     orderparams ={
@@ -156,5 +156,21 @@ def modify_order_new_function(symbol, token, stoploss_price, limit_price, order_
     else:
         print(f"Failed to modify the order. Error: {response['message']}")
 
-order_id = modify_order_new_function(symbol, token, 0.50, 0.40, "240813100563311", "25")
-print("SL placed", order_id)
+# order_id = modify_order_new_function(symbol, token, 0.50, 0.40, "240813100563311", "25")
+# print("SL placed", order_id)
+
+# def some(order_id):
+#     while True:
+#         try:
+#             order_book = smart.orderBook()['data'] 
+#             order_book = smart.tradeBook()['data']
+           
+#             for i in order_book:
+#                 if i['orderid'] == order_id:
+#                     return i, order_id
+#         except Exception as e:
+#             print("error", e)
+        
+# some("240822101183262")
+
+print(smart.orderBook())
