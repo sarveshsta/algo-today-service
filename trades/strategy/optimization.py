@@ -607,8 +607,8 @@ class BaseStrategy:
                         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
                         self.indicator.price = float(trade_book_full_response['fillprice'])
 
-                        sleep(1)
-                        self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                        await asyncio.sleep(1)
+                        self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                         self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                         
                         logger.info(f"We got buying price at {self.indicator.price}")
@@ -617,8 +617,8 @@ class BaseStrategy:
                             logger.info(f"Market price at which we bought is {price}")
                             self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
                             self.indicator.stop_loss_price = self.indicator.price * 0.95
-                            sleep(1)
-                            self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                            await asyncio.sleep(1)
+                            self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                             self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                             logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
                         
@@ -628,7 +628,7 @@ class BaseStrategy:
                         logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
                         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
                         
-                        self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
+                        self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                         self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                         
                         logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
