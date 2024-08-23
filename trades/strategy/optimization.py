@@ -262,7 +262,7 @@ class SmartApiDataProvider(DataProviderInterface):
         return ltp_data
 
     def get_trade_book(self, order_id):
-        sleep(3)
+        sleep(2)
         while True:
             try:
                 order_book = self.__smart.tradeBook()['data']
@@ -271,10 +271,10 @@ class SmartApiDataProvider(DataProviderInterface):
                         return order_id, i
             except Exception as e:
                 sleep(5)
-                logger.info(f"Could not fetch the order_book: {str(e)}")
+                logger.info(f"Could not fetch the trade_book: {str(e)}")
 
     def get_order_book(self, order_id):
-        sleep(3)
+        sleep(2)
         while True:
             try:
                 order_book = self.__smart.orderBook()['data']
@@ -305,9 +305,8 @@ class SmartApiDataProvider(DataProviderInterface):
             }
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(orderparams)
-            sleep(2)
-            logger.info(f"PlaceOrder id : {order_id} ")
             sleep(1)
+            logger.info(f"PlaceOrder id : {order_id} ")
             order_id, i = self.get_trade_book(order_id=order_id)
             return order_id, i
         except Exception as e:
@@ -351,7 +350,7 @@ class SmartApiDataProvider(DataProviderInterface):
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.modifyOrder(modify_sl_order_params)
             logger.info(f"ORDER MODIFY ID : {order_id}")
-            sleep(2)
+            sleep(1)
             order_id, i = self.get_trade_book(order_id=order_id)
             return order_id, i
         except Exception as e:
@@ -395,7 +394,7 @@ class SmartApiDataProvider(DataProviderInterface):
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(stoploss_limit_order_params)
             logger.info(f"STOPLOSS ID: {order_id}")
-            sleep(3)
+            sleep(1)
             order_id, i = self.get_trade_book(order_id=order_id)
             return order_id, i
         except Exception as e:
@@ -604,22 +603,21 @@ class BaseStrategy:
                     logger.info(f"Signal: {signal} at Price: {price_returned} in {index_info[0]}")
 
                     if signal == Signal.BUY:
-                        logger.info(f"Order Status: {index_info} {Signal.BUY}")
 
                         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        
                         self.indicator.price = float(trade_book_full_response['fillprice'])
 
+                        sleep(1)
                         self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
                         self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                         
-                        logger.info(f"we got buying price at {self.indicator.price}")
+                        logger.info(f"We got buying price at {self.indicator.price}")
                         
                         if self.indicator.order_id:
                             logger.info(f"Market price at which we bought is {price}")
                             self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.70), (self.indicator.price*0.65)))
                             self.indicator.stop_loss_price = self.indicator.price * 0.70
-                            
+                            sleep(1)
                             self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
                             self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                             logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
