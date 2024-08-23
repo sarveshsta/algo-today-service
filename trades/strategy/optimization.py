@@ -615,8 +615,8 @@ class BaseStrategy:
                         
                         if self.indicator.order_id:
                             logger.info(f"Market price at which we bought is {price}")
-                            self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.70), (self.indicator.price*0.65)))
-                            self.indicator.stop_loss_price = self.indicator.price * 0.70
+                            self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
+                            self.indicator.stop_loss_price = self.indicator.price * 0.95
                             sleep(1)
                             self.indicator.order_id, order_book_full_response = self.data_provider.get_order_book(self.indicator.order_id)
                             self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
