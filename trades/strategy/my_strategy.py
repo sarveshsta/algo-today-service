@@ -17,6 +17,27 @@ import os, ast
 from dotenv import load_dotenv
 from trades.strategy.utility import save_order, place_order_mail, save_strategy
 from trades.schema import StartStrategySchema
+from neo_api_client import NeoAPI
+
+def on_message(message):
+    print(message)
+    
+def on_error(error_message):
+    print(error_message)
+
+def on_close(message):
+    print(message)
+    
+def on_open(message):
+    print(message)
+
+#First initialize session and generate session token
+    
+#on_message, on_open, on_close and on_error is a call back function we will provide the response for the subscribe method.
+# access_token is an optional one. If you have barrier token then pass and consumer_key and consumer_secret will be optional.
+# environment by default uat you can pass prod to connect to live server
+
+client.session_2fa("")
 
 router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
@@ -180,7 +201,7 @@ class SmartApiDataProvider(DataProviderInterface):
         self.__smart = smart
         self.__ltpSmart = ltpSmart
 
-    def fetch_candle_data(self, token, interval) -> pd.DataFrame:
+    def fetch_candle_data(self, order_id, interval) -> pd.DataFrame:
         to_date = datetime.now()
         from_date = to_date - timedelta(minutes=360)
         from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
@@ -192,6 +213,7 @@ class SmartApiDataProvider(DataProviderInterface):
             "fromdate": from_date_format,
             "todate": to_date_format,
         }
+        
         res_json = self.__smart.getCandleData(historic_params)
         print("candle_data response: ",res_json)
         columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
@@ -200,38 +222,62 @@ class SmartApiDataProvider(DataProviderInterface):
         return data
 
     def fetch_ltp_data(self, token):
-        ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
-        return ltp_data
-    
-    def place_order(self, symbol, token, transaction, price, quantity):
         try:
-            orderparams ={
-                "variety": "NORMAL",
-                "tradingsymbol": symbol,
-                "symboltoken": token,
-                "transactiontype": transaction,
-                "exchange": "NFO",
-                "ordertype": "MARKET",
-                "producttype": "INTRADAY",
-                "duration": "DAY",
-                "price": price,
-                "squareoff": "0",
-                "stoploss": "0",
-                "quantity": quantity,
-            }
-            # Method 1: Place an order and return the order ID
-            order_response = self.__smart.placeOrder(orderparams)
-            logger.info(f"PlaceOrder : {order_response}")
-
-            # Method 2: Place an order and return the full response
-            order_book = self.__smart.orderBook()
-            for i in order_book['data']:
-                if i['orderid'] == order_id:
-                    return order_id, i
-            return order_id, None
+    # Get all order details
+            client.order_report(token)
+    # Get particular details using order_id
+            client.order_history()    
         except Exception as e:
-            logger.info(f"Order placement failed: {e}")
-            return False
+            print("Exception when order report API->order_report: %s\n" % e)
+        
+    
+    def place_order(self, treading_symbol, token, transaction_type, price, quantity):
+        try:
+        # Place a Order
+            client.place_order(exchange_segment="",
+                               product="",
+                               price="",
+                               order_type="",
+                               quantity="", 
+                               validity="",
+                               trading_symbol="",
+                               transaction_type="",
+                               amo="NO",
+                               disclosed_quantity="0",
+                               market_protection="0",
+                               pf="N",
+                               trigger_price="0",
+                               tag=None)
+        except Exception as e:
+            print("Exception when calling OrderApi->place_order: %s\n" % e)
+        # try:
+        #     orderparams ={
+        #         "variety": "NORMAL",
+        #         "tradingsymbol": symbol,
+        #         "symboltoken": token,
+        #         "transactiontype": transaction,
+        #         "exchange": "NFO",
+        #         "ordertype": "MARKET",
+        #         "producttype": "INTRADAY",
+        #         "duration": "DAY",
+        #         "price": price,
+        #         "squareoff": "0",
+        #         "stoploss": "0",
+        #         "quantity": quantity,
+        #     }
+        #     # Method 1: Place an order and return the order ID
+        #     order_response = self.__smart.placeOrder(orderparams)
+        #     logger.info(f"PlaceOrder : {order_response}")
+
+        #     # Method 2: Place an order and return the full response
+        #     order_book = self.__smart.orderBook()
+        #     for i in order_book['data']:
+        #         if i['orderid'] == order_id:
+        #             return order_id, i
+        #     return order_id, None
+        # except Exception as e:
+        #     logger.info(f"Order placement failed: {e}")
+        #     return False
 
 
 class IndicatorInterface:
@@ -588,15 +634,17 @@ async def start_strategy(strategy_params: StartStrategySchema):
         logger.info("index_and_candle_durations.keys(): ",index_and_candle_durations.keys())
         logger.info("index_and_candle_durations.values(): ",index_and_candle_durations.values())
 
-        ltp_smart.generateSession(
-            clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-        )
+        #the session initializes when the following constructor is called
+        # environment by default uat you can pass prod to connect to live server
+        client = NeoAPI(consumer_key="", consumer_secret="", environment='uat',
+                        access_token=None, neo_fin_key=None)
 
-        try:
-            smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
-        except Exception as e:
-            return {"message": str(e), "success": True}
+        # Initiate login by passing any of the combinations mobilenumber & password (or) pan & password (or) userid & password
+        # Also this will generate the OTP to complete 2FA
+        client.login(mobilenumber="+919999999999", password="XXXX")
 
+        # Complete login and generate session token
+        client.session_2fa(OTP="")
         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
         max_transactions_indicator = MaxMinOfLastTwo()
