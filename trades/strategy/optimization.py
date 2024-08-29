@@ -480,30 +480,39 @@ class MultiIndexStrategy(IndicatorInterface):
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
-                if self.number_of_candles > len(data) - 2:
-                    self.number_of_candles = len(data) - 2
+                
+                current_candle = data.iloc[1] #latest candle formed
+                previous_candle = data.iloc[2] #last second candle formed
+                
+                max_high = max(current_candle["High"], previous_candle['High'])
+                if (8*(current_candle['High']-current_candle['Close'])) < (current_candle['High']-current_candle['Low']):
+                    self.price = current_candle['High']
+                    self.trade_details["index"] = token
+                else:
+                    self.price=max_high
+                    self.trade_details["index"] = token
 
-                for i in range(1, self.number_of_candles + 1):
-                    current_candle = data.iloc[i]
-                    previous_candle = data.iloc[i + 1]
+                # for i in range(1, self.number_of_candles + 1):
+                #     current_candle = data.iloc[i]
+                #     previous_candle = data.iloc[i + 1]
 
-                    if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
-                        high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 1, -1)]
-                        try:
-                            max_high = max(high_values)
-                        except:
-                            max_high = current_candle["High"]
-                        self.price = max_high
-                        self.trading_price = max_high
-                        self.trade_details["index"] = token
-                        break
+                #     if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
+                #         high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 1, -1)]
+                #         try:
+                #             max_high = max(high_values)
+                #         except:
+                #             max_high = current_candle["High"]
+                #         self.price = max_high
+                #         self.trading_price = max_high
+                #         self.trade_details["index"] = token
+                #         break
 
-                    elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
-                        # No need to reassign current_candle and previous_candle here since it's already done above.
-                        self.price = current_candle["High"]
-                        self.trading_price = current_candle["High"]
-                        self.trade_details["index"] = token
-                        break
+                #     elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
+                #         # No need to reassign current_candle and previous_candle here since it's already done above.
+                #         self.price = current_candle["High"]
+                #         self.trading_price = current_candle["High"]
+                #         self.trade_details["index"] = token
+                #         break
                 
             
             # buying conditions
@@ -524,12 +533,6 @@ class MultiIndexStrategy(IndicatorInterface):
                     write_logs(
                         "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
                     )
-
-                    stoploss_1 = (0.95 * self.price)
-                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
-                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
-                    final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
-                    self.price = round(final_stoploss, 1)  
 
                     return (Signal.BUY, self.price, index_info)
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
@@ -552,18 +555,21 @@ class MultiIndexStrategy(IndicatorInterface):
             # direct selling condition
             if not self.waiting_for_buy:
                 if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details['success'] == True:
-                    if ltp >= (1.20*self.price):
-                        logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
-                        self.stop_loss_price = (self.stop_loss_price * 1.10)
-                        self.waiting_to_modify_or_sell =True
-                        # modifying the stop loss
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
-                    elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
-
-                        logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
-                        self.stop_loss_price = data.iloc[1]["Low"] * 0.98
-                        self.waiting_to_modify_or_sell = True
+                    # finding max of three
+                    stoploss_1 = self.stop_loss_price
+                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.985
+                    stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
+                    
+                    if ltp >= (1.20*self.price):
+                        logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price, taking maximum")
+                        self.stop_loss_price = max(round((self.stop_loss_price*1.10), 2), stoploss_condition_1)
+                        return (Signal.MODIFY, self.stop_loss_price, index_info)``
+                    
+                    elif ltp >= (1.10*self.price):
+                        logger.info(f"Modifying the stop-loss, ltp is 10%greater than original price, taking maximum")
+                        self.stop_loss_price = max(round((self.stop_loss_price * 1.05), 2), stoploss_condition_1)
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif ltp <= self.stop_loss_price:
