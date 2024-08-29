@@ -152,6 +152,9 @@ class Signal(Enum):
     WAITING_TO_BUY = 3
     WAITING_TO_MODIFY = 4
     NULL = 5
+    SELL = 6
+    WAITING_TO_SELL = 7
+    WAITING_FOR_MODIFY_OR_SELL = 8
 
 class Token:
     def __init__(self, exch_seg: str, token_id: str, symbol: str):
@@ -219,6 +222,9 @@ class DataProviderInterface:
         raise NotImplementedError("Subclasses must implement fetch_ltp_data()")
 
     def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
+        raise NotImplementedError("Subclasses must implement place_order()")
+
+    def sell_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
     def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price:float, limit_price:float, order_id: str):
@@ -289,7 +295,6 @@ class SmartApiDataProvider(DataProviderInterface):
     def place_order(self, symbol, token, transaction, ordertype, price, quantity):
         if ordertype == "MARKET": price="0"
         try:
-            order_id , price = 3445, price 
             orderparams = {
                 "variety": "NORMAL",
                 "tradingsymbol": symbol,
@@ -308,6 +313,33 @@ class SmartApiDataProvider(DataProviderInterface):
             order_id = self.__smart.placeOrder(orderparams)
             sleep(1)
             logger.info(f"PlaceOrder id : {order_id} ")
+            order_id, i = self.get_trade_book(order_id=order_id)
+            return order_id, i
+        except Exception as e:
+            logger.info(f"Order placement failed: {e}")
+            raise ValueError(f"Stop-loss placing failed, reason: {e}")
+                
+    def sell_order(self, symbol, token, transaction, ordertype, price, quantity):
+        if ordertype == "MARKET": price="0"
+        try:
+            orderparams = {
+                "variety": "NORMAL",
+                "tradingsymbol": symbol,
+                "symboltoken": token,
+                "transactiontype": transaction,
+                "exchange": "NFO",
+                "ordertype": ordertype,
+                "producttype": "INTRADAY",
+                "duration": "DAY",
+                "price": price,
+                "squareoff": "0",
+                "stoploss": "0",
+                "quantity": quantity,
+            }
+            # Method 1: Place an order and return the order ID
+            order_id = self.__smart.placeOrder(orderparams)
+            sleep(1)
+            logger.info(f"Sell-order id : {order_id} ")
             order_id, i = self.get_trade_book(order_id=order_id)
             return order_id, i
         except Exception as e:
@@ -425,6 +457,9 @@ class MultiIndexStrategy(IndicatorInterface):
         self.to_modify = False
         self.waiting_to_modify = False 
         self.waiting_for_buy = True
+        self.to_sell = False
+        self.waiting_to_sell = False
+        self.waiting_to_modify_or_sell = False
         self.stop_loss_price = 0.0
         self.price = 0.0
         self.trading_price = 0
@@ -440,8 +475,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
         token = str(passed_token).split(":")[-1] #this is actually symbol written as FINNIFTY23JUL2423500CE
         symbol_token = str(passed_token).split(":")[1] #a five digit integer number to represent the actual token number for the symbol
-        index_info = [token, symbol_token]
-        logger.info(f"Current LTP of {token} is {ltp}")
+        index_info = [token, symbol_token, ltp]
         
         try:
             # checking for pre buying condition
@@ -449,7 +483,6 @@ class MultiIndexStrategy(IndicatorInterface):
                 if self.number_of_candles > len(data) - 2:
                     self.number_of_candles = len(data) - 2
 
-                logger.info("Finding pivot value")
                 for i in range(1, self.number_of_candles + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
@@ -463,7 +496,6 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.price = max_high
                         self.trading_price = max_high
                         self.trade_details["index"] = token
-                        logger.info(f"Pivot Value {self.price} at {token}")
                         break
 
                     elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
@@ -471,19 +503,18 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.price = current_candle["High"]
                         self.trading_price = current_candle["High"]
                         self.trade_details["index"] = token
-                        logger.info(f"Pivot Value {self.price} at {token}")
                         break
                 
-                
-
+            
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
                 if  ltp > (1.01 * self.price):
                     self.to_buy = True
                     self.waiting_to_modify = True
+                    self.waiting_to_modify_or_sell = True
 
-                    self.to_modify = False
                     self.waiting_for_buy = False
+
                     self.price = ltp
                     self.trade_details["success"] = True
                     self.trade_details["index"] = token
@@ -503,25 +534,59 @@ class MultiIndexStrategy(IndicatorInterface):
                     return (Signal.BUY, self.price, index_info)
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
-            # modify stop loss conditions
-            elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
-                if ltp > (self.price*1.20):
-                    logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
-                    self.price = ltp
-                    # modifying the stop loss
-                    return (Signal.MODIFY, self.price, index_info)
-                elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
-                    logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
-                    self.price = self.stop_loss_price
-                    # modifying the stop loss
-                    return (Signal.MODIFY, self.price, index_info)
-                else:
-                    return (Signal.WAITING_TO_MODIFY, self.price, index_info) 
+            # # modify stop loss conditions
+            # elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
+            #     if ltp > (self.price*1.20):
+            #         logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
+            #         self.price = ltp
+            #         # modifying the stop loss
+            #         return (Signal.MODIFY, self.price, index_info)
+            #     elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
+            #         logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
+            #         self.price = self.stop_loss_price
+            #         # modifying the stop loss
+            #         return (Signal.MODIFY, self.price, index_info)
+            #     else:
+            #         return (Signal.WAITING_TO_MODIFY, self.price, index_info) 
 
-            elif not self.to_modify and self.to_buy and not self.waiting_for_buy:
-                self.waiting_to_modify = True
-                return (Signal.WAITING_TO_MODIFY, self.price, index_info)
-            
+            # direct selling condition
+            if not self.waiting_for_buy:
+                if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details['success'] == True:
+                    if ltp >= (1.20*self.price):
+                        logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
+                        self.stop_loss_price = (self.stop_loss_price * 1.10)
+                        self.waiting_to_modify_or_sell =True
+                        # modifying the stop loss
+                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                    
+                    elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
+
+                        logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
+                        self.stop_loss_price = data.iloc[1]["Low"] * 0.98
+                        self.waiting_to_modify_or_sell = True
+                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                    
+                    elif ltp <= self.stop_loss_price:
+                        self.trade_details["success"] = False
+                        self.trade_details["index"] = None
+                        self.trade_details["datetime"] = datetime.now()
+
+                        self.to_buy = False
+                        self.waiting_to_modify_or_sell = False
+
+                        self.to_sell = True
+                        self.waiting_for_buy = True
+                        return (Signal.SELL, self.stop_loss_price, index_info)
+                    else:
+                        self.waiting_to_modify_or_sell = True
+                        return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
+                else:
+                    self.waiting_to_modify_or_sell = True
+                    return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
+
+            elif self.waiting_to_modify_or_sell:
+                return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.price, index_info)
+                    
             else:
                 self.waiting_for_buy = True
                 self.trade_details["success"] = False
@@ -592,7 +657,6 @@ class BaseStrategy:
             for index, value in index_candle_data:
                 await asyncio.sleep(1)
                 if (value and self.index_ltp_values[index]) is not None:
-                    logger.info(f"token1: {self.token_value[index]}, quantity1: {self.parameters[index]}")
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(value, columns=columns)
                     latest_candle = data.iloc[1]
@@ -601,49 +665,76 @@ class BaseStrategy:
                     signal, price_returned, index_info = await async_return(
                         self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                     )
-                    logger.info(f"Signal: {signal} at Price: {price_returned} in {index_info[0]}")
+                    logger.info(f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}")
 
                     if signal == Signal.BUY:
-
                         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
                         self.indicator.price = float(trade_book_full_response['fillprice'])
-
-                        await asyncio.sleep(1)
-                        self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
-                        self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
-                        
-                        logger.info(f"We got buying price at {self.indicator.price}")
-                        
-                        if self.indicator.order_id:
-                            logger.info(f"Market price at which we bought is {price}")
-                            self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
-                            self.indicator.stop_loss_price = self.indicator.price * 0.95
-                            await asyncio.sleep(1)
-                            self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
-                            self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
-                            logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
-                        
-                        logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
+                        self.indicator.stop_loss_price = self.indicator.price * 0.95
+                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                     
-                    elif signal == Signal.MODIFY:
-                        logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
+                    elif signal == Signal.SELL:
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                         
-                        self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
-                        self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
-                        
-                        logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
                     
-                    if not self.indicator.waiting_for_buy:
-                        order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
-                        logger.info(f"order_status: {order_status}, message: {text}")
+                    # if not self.indicator.waiting_for_buy:
+                    #     order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
+                    #     logger.info(f"order_status: {order_status}, message: {text}")
 
-                        if order_status.lower() == 'complete':
-                            self.indicator.waiting_for_buy = True
-                            self.indicator.to_buy = False
-                            self.indicator.to_modify = False
-                            self.indicator.waiting_to_modify = False
-                            logger.info("Stop-loss has been triggered")
+                    #     if order_status.lower() == 'complete':
+                    #         self.indicator.waiting_for_buy = True
+                    #         self.indicator.to_buy = False
+                    #         self.indicator.to_modify = False
+                    #         self.indicator.waiting_to_modify = False
+                    #         logger.info("Stop-loss has been triggered")
+                
+                
+
+                    # if signal == Signal.BUY:
+
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                    #     self.indicator.price = float(trade_book_full_response['fillprice'])
+
+                    #     await asyncio.sleep(1)
+                    #     self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
+                    #     self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                        
+                    #     logger.info(f"We got buying price at {self.indicator.price}")
+                        
+                    #     if self.indicator.order_id:
+                    #         logger.info(f"Market price at which we bought is {price}")
+                    #         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
+                    #         self.indicator.stop_loss_price = self.indicator.price * 0.95
+                    #         await asyncio.sleep(1)
+                    #         self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
+                    #         self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                    #         logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
+                        
+                    #     logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
+                    
+                    # elif signal == Signal.MODIFY:
+                    #     logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
+                        
+                    #     self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
+                    #     self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
+                        
+                    #     logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
+                    
+                    # if not self.indicator.waiting_for_buy:
+                    #     order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
+                    #     logger.info(f"order_status: {order_status}, message: {text}")
+
+                    #     if order_status.lower() == 'complete':
+                    #         self.indicator.waiting_for_buy = True
+                    #         self.indicator.to_buy = False
+                    #         self.indicator.to_modify = False
+                    #         self.indicator.waiting_to_modify = False
+                    #         logger.info("Stop-loss has been triggered")
+                
+                
                 else:
                     logger.info("Waiting for data...")
         except Exception as e:
