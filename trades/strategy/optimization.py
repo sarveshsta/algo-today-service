@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
+from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
 
@@ -16,7 +17,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from SmartApi import SmartConnect
-from time import sleep
+
 from trades.schema import StartStrategySchema
 from trades.strategy.utility import place_order_mail, save_order, save_strategy
 
@@ -265,7 +266,7 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__ltpSmart.tradeBook()['data']
+                order_book = self.__smart.tradeBook()['data']
                 for i in order_book:
                     if i['orderid'] == order_id:
                         return order_id, i
@@ -277,7 +278,7 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__ltpSmart.orderBook()['data']
+                order_book = self.__smart.orderBook()['data']
                 for i in order_book:
                     if i['orderid'] == order_id:
                         return order_id, i
@@ -617,7 +618,7 @@ class BaseStrategy:
                             logger.info(f"Market price at which we bought is {price}")
                             self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
                             self.indicator.stop_loss_price = self.indicator.price * 0.95
-                            await asyncio.sleep(10)
+                            await asyncio.sleep(1)
                             self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                             self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                             logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
