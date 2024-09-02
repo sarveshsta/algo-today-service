@@ -563,13 +563,18 @@ class MultiIndexStrategy(IndicatorInterface):
                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
                     
                     if ltp >= (1.20*self.price):
-                        logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price, taking maximum")
-                        self.stop_loss_price = max(round((self.stop_loss_price*1.10), 2), stoploss_condition_1)
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)``
+                        self.stop_loss_price = max(round((self.price*1.10), 2), stoploss_condition_1)
+                        logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
+                        return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif ltp >= (1.10*self.price):
-                        logger.info(f"Modifying the stop-loss, ltp is 10%greater than original price, taking maximum")
-                        self.stop_loss_price = max(round((self.stop_loss_price * 1.05), 2), stoploss_condition_1)
+                        self.stop_loss_price = max(round((self.price * 1.05), 2), stoploss_condition_1)
+                        logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
+                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                    
+                    elif stoploss_condition_1 > self.stop_loss_price:
+                        self.stop_loss_price = stoploss_condition_1
+                        logger.info(f"Modifying the stop-loss according t o Low condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif ltp <= self.stop_loss_price:
@@ -673,16 +678,16 @@ class BaseStrategy:
                     )
                     logger.info(f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}")
 
-                    if signal == Signal.BUY:
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        self.indicator.price = float(trade_book_full_response['fillprice'])
-                        self.indicator.stop_loss_price = self.indicator.price * 0.95
-                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                    # if signal == Signal.BUY:
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                    #     self.indicator.price = float(trade_book_full_response['fillprice'])
+                    #     self.indicator.stop_loss_price = self.indicator.price * 0.95
+                    #     logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                     
-                    elif signal == Signal.SELL:
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
-                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                    # elif signal == Signal.SELL:
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                    #     self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                    #     logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                         
                     
                     # if not self.indicator.waiting_for_buy:
