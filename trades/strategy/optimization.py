@@ -36,8 +36,6 @@ class Constants:
         self.CLIENT_CODE = "J263557"
         self.PASSWORD = "7753"
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-        self.TRADE_DETAILS = {"success": False, "index": None, "datetime": datetime.now()}
-        self.PRICE = 0.0
         self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         self.OPT_TYPE = "OPTIDX"
         self.EXCH_TYPE = "NFO"
@@ -45,23 +43,24 @@ class Constants:
         self.LTP_CLIENT_CODE = "S55329579"
         self.LTP_PASSWORD = "4242"
         self.LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
-        self.OHLC_1 = "Close"
-        self.OHLC_2 = "High"
-        self.INDEX_CANDLE_DATA = []
+        self.CLOSE = "Close"
+        self.HIGH = "High"
+        self.LOW = "Low"
+        self.OPEN = "Open"
         self.BUYING_MULTIPLAYER = 1.01
-        self.BUYING_OHLC = "High"
+        self.STOP_LOSS_MULTIPLIER = 0.95
+
         self.TRAIL_LTP_MULTIPLIER = 1.12
         self.PRICE_VS_LTP_MULTIPLIER = 0.95
-        self.SELLING_OHLC1 = "High"
         self.SELLING_OHLC1_MULTIPLIER = 1.10
-        self.SELLING_OHLC2 = "Low"
         self.SELLING_OHLC2_MULTIPLIER = 0.95
         self.PLACE_STOPLOSS_STOP_LOSS_PRICE = 0.20
         self.PLACE_STOPLOSS_STOP_LIMIT_PRICE = 0.20 
         self.MODIFY_STOPLOSS_STOP_LOSS_PRICE = 1.18
         self.MODIFY_STOPLOSS_STOP_LIMIT_PRICE = 1.15
         
-        
+constant = Constants()
+
 # client code to get LTP data
 LTP_API_KEY = "MolOSZTR"
 LTP_CLIENT_CODE = "S55329579"
@@ -484,9 +483,9 @@ class MultiIndexStrategy(IndicatorInterface):
                 current_candle = data.iloc[1] #latest candle formed
                 previous_candle = data.iloc[2] #last second candle formed
                 
-                max_high = max(current_candle["High"], previous_candle['High'])
-                if (8*(current_candle['High']-current_candle['Close'])) < (current_candle['High']-current_candle['Low']):
-                    self.price = current_candle['High']
+                max_high = max(current_candle[constant.HIGH], previous_candle[constant.HIGH])
+                if (8*(current_candle[constant.HIGH]-current_candle[constant.CLOSE])) < (current_candle[constant.HIGH]-current_candle[constant.LOW]):
+                    self.price = current_candle[constant.HIGH]
                     self.trade_details["index"] = token
                 else:
                     self.price=max_high
@@ -681,20 +680,20 @@ class BaseStrategy:
                     logger.info(f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}")
 
                     if signal == Signal.BUY:
-                        # self.indicator.price = price_returned
-                        # self.indicator.stop_loss_price = self.indicator.price * 0.95
-                        # logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        self.indicator.price = float(trade_book_full_response['fillprice'])
-                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        self.indicator.price = price_returned
+                        self.indicator.stop_loss_price = self.indicator.price * 0.95
+                        logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        # self.indicator.price = float(trade_book_full_response['fillprice'])
+                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        # logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
                     
                     elif signal == Signal.SELL:
-                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                        logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                         
                     
                     # if not self.indicator.waiting_for_buy:
