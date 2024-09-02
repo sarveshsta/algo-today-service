@@ -43,21 +43,26 @@ class Constants:
         self.LTP_CLIENT_CODE = "S55329579"
         self.LTP_PASSWORD = "4242"
         self.LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+        
+        self.TRACE_CANDLE = 5
         self.CLOSE = "Close"
         self.HIGH = "High"
         self.LOW = "Low"
         self.OPEN = "Open"
-        self.BUYING_MULTIPLAYER = 1.01
+
+        self.BUYING_MULTIPLIER = 1.01
         self.STOP_LOSS_MULTIPLIER = 0.95
 
-        self.TRAIL_LTP_MULTIPLIER = 1.12
-        self.PRICE_VS_LTP_MULTIPLIER = 0.95
-        self.SELLING_OHLC1_MULTIPLIER = 1.10
-        self.SELLING_OHLC2_MULTIPLIER = 0.95
-        self.PLACE_STOPLOSS_STOP_LOSS_PRICE = 0.20
-        self.PLACE_STOPLOSS_STOP_LIMIT_PRICE = 0.20 
-        self.MODIFY_STOPLOSS_STOP_LOSS_PRICE = 1.18
-        self.MODIFY_STOPLOSS_STOP_LIMIT_PRICE = 1.15
+        self.SL_LOW_MULTIPLIER_1 = 0.97
+        self.SL_LOW_MULTIPLIER_2 = 0.985
+
+        self.TRAIL_SL_1 = 1.20
+        self.TRAIL_SL_2 = 1.10
+
+        self.MODITY_STOP_LOSS_1 = 1.10
+        self.MODITY_STOP_LOSS_2 = 1.05
+
+        
         
 constant = Constants()
 
@@ -462,8 +467,6 @@ class MultiIndexStrategy(IndicatorInterface):
         self.stop_loss_price = 0.0
         self.price = 0.0
         self.trading_price = 0
-        self.number_of_candles = 5
-        self.stop_loss_info = None
         self.order_id = "000000000000"
         self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
@@ -483,40 +486,32 @@ class MultiIndexStrategy(IndicatorInterface):
                 current_candle = data.iloc[1] #latest candle formed
                 previous_candle = data.iloc[2] #last second candle formed
                 
-                max_high = max(current_candle[constant.HIGH], previous_candle[constant.HIGH])
-                if (8*(current_candle[constant.HIGH]-current_candle[constant.CLOSE])) < (current_candle[constant.HIGH]-current_candle[constant.LOW]):
-                    self.price = current_candle[constant.HIGH]
-                    self.trade_details["index"] = token
-                else:
-                    self.price=max_high
-                    self.trade_details["index"] = token
+                for i in range(1, constant.TRACE_CANDLE + 1):
+                    current_candle = data.iloc[i]
+                    previous_candle = data.iloc[i + 1]
 
-                # for i in range(1, self.number_of_candles + 1):
-                #     current_candle = data.iloc[i]
-                #     previous_candle = data.iloc[i + 1]
+                    if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
+                        high_values = [float(data.iloc[j][constant.HIGH]) for j in range(i, 1, -1)]
+                        try:
+                            max_high = max(high_values)
+                        except:
+                            max_high = current_candle[constant.HIGH]
+                        self.price = max_high
+                        self.trading_price = max_high
+                        self.trade_details["index"] = token
+                        break
 
-                #     if current_candle[OHLC_1] >= previous_candle[OHLC_2]:
-                #         high_values = [float(data.iloc[j][OHLC_2]) for j in range(i, 1, -1)]
-                #         try:
-                #             max_high = max(high_values)
-                #         except:
-                #             max_high = current_candle["High"]
-                #         self.price = max_high
-                #         self.trading_price = max_high
-                #         self.trade_details["index"] = token
-                #         break
-
-                #     elif (8 * (float(current_candle['High']) - float(current_candle['Close']))) < (float(previous_candle["High"]) - float(previous_candle["Low"])):
-                #         # No need to reassign current_candle and previous_candle here since it's already done above.
-                #         self.price = current_candle["High"]
-                #         self.trading_price = current_candle["High"]
-                #         self.trade_details["index"] = token
-                #         break
+                    elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])):
+                        # No need to reassign current_candle and previous_candle here since it's already done above.
+                        self.price = current_candle[constant.HIGH]
+                        self.trading_price = current_candle[constant.HIGH]
+                        self.trade_details["index"] = token
+                        break
                 
             
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
-                if  ltp > (1.01 * self.price):
+                if  ltp > (constant.BUYING_MULTIPLIER * self.price):
                     self.to_buy = True
                     self.waiting_to_modify = True
                     self.waiting_to_modify_or_sell = True
@@ -554,20 +549,21 @@ class MultiIndexStrategy(IndicatorInterface):
             # direct selling condition
             if not self.waiting_for_buy:
                 if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details['success'] == True:
+                    
                     # finding max of three
                     stoploss_1 = self.stop_loss_price
-                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
-                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.985
+                    stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
+                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * constant.SL_LOW_MULTIPLIER_2
                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
                     
-                    if ltp >= (1.20*self.price):
-                        self.stop_loss_price = max(round((self.price*1.10), 2), stoploss_condition_1)
+                    if ltp >= (constant.TRAIL_SL_1 * self.price):
+                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
                         self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
-                    elif ltp >= (1.10*self.price):
-                        self.stop_loss_price = max(round((self.price * 1.05), 2), stoploss_condition_1)
+                    elif ltp >= (constant.TRAIL_SL_2 * self.price):
+                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
                         self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
@@ -681,7 +677,7 @@ class BaseStrategy:
 
                     if signal == Signal.BUY:
                         self.indicator.price = price_returned
-                        self.indicator.stop_loss_price = self.indicator.price * 0.95
+                        self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
                         logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
                         # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
                         # self.indicator.price = float(trade_book_full_response['fillprice'])
