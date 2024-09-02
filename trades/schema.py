@@ -30,7 +30,7 @@ class IndexData(BaseModel):
     option: str
     chart_time: str
     quantity: int | None
-    
+    trading_amount : int
     class Config:
         from_attributes = True
 

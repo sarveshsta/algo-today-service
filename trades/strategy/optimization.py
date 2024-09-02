@@ -30,6 +30,7 @@ load_dotenv()
 # password = os.getenv("PASSWORD")
 # token_code = os.getenv("TOKEN_CODE")
 
+
 class Constants:
     def __init__(self):
         self.API_KEY = "T4MHVpXH"
@@ -38,12 +39,13 @@ class Constants:
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
         self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         self.OPT_TYPE = "OPTIDX"
+        self.INDEX_CANDLE_DATA = []
         self.EXCH_TYPE = "NFO"
         self.LTP_API_KEY = "MolOSZTR"
         self.LTP_CLIENT_CODE = "S55329579"
         self.LTP_PASSWORD = "4242"
         self.LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
-        
+
         self.TRACE_CANDLE = 5
         self.CLOSE = "Close"
         self.HIGH = "High"
@@ -62,8 +64,7 @@ class Constants:
         self.MODITY_STOP_LOSS_1 = 1.10
         self.MODITY_STOP_LOSS_2 = 1.05
 
-        
-        
+
 constant = Constants()
 
 # client code to get LTP data
@@ -77,12 +78,6 @@ api_key = "T4MHVpXH"
 client_code = "J263557"
 password = "7753"
 token_code = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-
-
-# constant data
-# global_order_id = 1111
-global_buying_price = 0
-price = 0.4
 
 # index details
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -128,28 +123,6 @@ class CandleDuration(Enum):
     TEN_MINUTE = "TEN_MINUTE"
 
 
-# price comparision
-OHLC_1 = "Close"
-OHLC_2 = "High"
-index_candle_data = []
-
-# buying condition comparision
-buying_multiplier = 1.01
-buying_OHLC = "High"
-
-# selling condition comparision
-trail_ltp_multiplier = 1.12
-price_vs_ltp_mulitplier = 0.95
-
-# stop loss condition
-selling_OHLC1 = "High"
-selling_OHLC1_multiplier = 1.10
-
-selling_OHLC2 = "Low"
-selling_OHLC2_multiplier = 0.95
-# variables initialisation complete
-
-
 class Signal(Enum):
     BUY = 1
     MODIFY = 2
@@ -159,6 +132,7 @@ class Signal(Enum):
     SELL = 6
     WAITING_TO_SELL = 7
     WAITING_FOR_MODIFY_OR_SELL = 8
+
 
 class Token:
     def __init__(self, exch_seg: str, token_id: str, symbol: str):
@@ -225,27 +199,29 @@ class DataProviderInterface:
     def fetch_ltp_data(self, token: Token, interval: str = "ONE_MINUTE", symvol: str = "") -> float:
         raise NotImplementedError("Subclasses must implement fetch_ltp_data()")
 
-    def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
+    def place_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity: str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
-    def sell_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity:str):
+    def sell_order(self, symbol: str, token: str, transaction: str, ordertype: str, price: str, quantity: str):
         raise NotImplementedError("Subclasses must implement place_order()")
 
-    def modify_stoploss_limit_order(self, symbol:str, token: str, quantity: str, stoploss_price:float, limit_price:float, order_id: str):
+    def modify_stoploss_limit_order(
+        self, symbol: str, token: str, quantity: str, stoploss_price: float, limit_price: float, order_id: str
+    ):
         raise NotImplementedError("Subclasses must implement modify_stoploss_limit_order()")
 
     def place_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price):
         raise NotImplementedError("Subclasses must implement place_stoploss_limit_order()")
-    
+
     def check_order_status(self, uniqueOrderId=None):
         raise NotImplementedError("Subclasses must implement check_order_status()")
 
     def get_trade_book(self, order_id):
         raise NotImplementedError("Subclasses must implement get_trade_boo()")
-         
+
     def get_order_book(self, order_id):
         raise NotImplementedError("Subclasses must implement get_order_book()")
-        
+
 
 class SmartApiDataProvider(DataProviderInterface):
     def __init__(self, smart: SmartConnect, ltpSmart: SmartConnect):
@@ -265,7 +241,7 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
         res_json = self.__smart.getCandleData(historic_params)
-        data = res_json['data'][::-1]
+        data = res_json["data"][::-1]
         return data[:15]
 
     def fetch_ltp_data(self, token):
@@ -276,9 +252,9 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__smart.tradeBook()['data']
+                order_book = self.__smart.tradeBook()["data"]
                 for i in order_book:
-                    if i['orderid'] == order_id:
+                    if i["orderid"] == order_id:
                         return order_id, i
             except Exception as e:
                 sleep(5)
@@ -288,16 +264,17 @@ class SmartApiDataProvider(DataProviderInterface):
         sleep(2)
         while True:
             try:
-                order_book = self.__smart.orderBook()['data']
+                order_book = self.__smart.orderBook()["data"]
                 for i in order_book:
-                    if i['orderid'] == order_id:
+                    if i["orderid"] == order_id:
                         return order_id, i
             except Exception as e:
                 sleep(5)
                 logger.info(f"Could not fetch the order_book: {str(e)}")
-                
+
     def place_order(self, symbol, token, transaction, ordertype, price, quantity):
-        if ordertype == "MARKET": price="0"
+        if ordertype == "MARKET":
+            price = "0"
         try:
             orderparams = {
                 "variety": "NORMAL",
@@ -322,9 +299,10 @@ class SmartApiDataProvider(DataProviderInterface):
         except Exception as e:
             logger.info(f"Order placement failed: {e}")
             raise ValueError(f"Stop-loss placing failed, reason: {e}")
-                
+
     def sell_order(self, symbol, token, transaction, ordertype, price, quantity):
-        if ordertype == "MARKET": price="0"
+        if ordertype == "MARKET":
+            price = "0"
         try:
             orderparams = {
                 "variety": "NORMAL",
@@ -351,7 +329,7 @@ class SmartApiDataProvider(DataProviderInterface):
             raise ValueError(f"Stop-loss placing failed, reason: {e}")
 
     def modify_stoploss_limit_order(self, symbol, token, quantity, stoploss_price, limit_price, order_id):
-        
+
         try:
             if not symbol or not token or not quantity or not stoploss_price or not limit_price:
                 raise ValueError("Missing required parameters")
@@ -370,19 +348,19 @@ class SmartApiDataProvider(DataProviderInterface):
                 raise ValueError("Stop-loss price and limit price must be numbers")
 
             modify_sl_order_params = {
-            "orderid": str(order_id),
-            "variety": "STOPLOSS",
-            "tradingsymbol": str(symbol),
-            "symboltoken": str(token),
-            "transactiontype": "SELL",  # Selling to trigger stop-loss
-            "exchange": "NFO",
-            "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
-            "producttype": "INTRADAY",
-            "duration": "DAY",
-            "price": str(limit_price),  # Limit price for SL-L orders
-            "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
-            "quantity": str(quantity),
-        }
+                "orderid": str(order_id),
+                "variety": "STOPLOSS",
+                "tradingsymbol": str(symbol),
+                "symboltoken": str(token),
+                "transactiontype": "SELL",  # Selling to trigger stop-loss
+                "exchange": "NFO",
+                "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+                "producttype": "INTRADAY",
+                "duration": "DAY",
+                "price": str(limit_price),  # Limit price for SL-L orders
+                "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+                "quantity": str(quantity),
+            }
 
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.modifyOrder(modify_sl_order_params)
@@ -415,18 +393,18 @@ class SmartApiDataProvider(DataProviderInterface):
 
             # Define stop-loss limit order parameters
             stoploss_limit_order_params = {
-                    "variety": "STOPLOSS",
-                    "tradingsymbol": str(symbol),
-                    "symboltoken": str(token),
-                    "transactiontype": "SELL",  # Selling to trigger stop-loss
-                    "exchange": "NFO",
-                    "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
-                    "producttype": "INTRADAY",
-                    "duration": "DAY",
-                    "price": str(limit_price),  # Limit price for SL-L orders
-                    "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
-                    "quantity": str(quantity),
-                }
+                "variety": "STOPLOSS",
+                "tradingsymbol": str(symbol),
+                "symboltoken": str(token),
+                "transactiontype": "SELL",  # Selling to trigger stop-loss
+                "exchange": "NFO",
+                "ordertype": "STOPLOSS_LIMIT",  # Stop-loss limit order
+                "producttype": "INTRADAY",
+                "duration": "DAY",
+                "price": str(limit_price),  # Limit price for SL-L orders
+                "triggerprice": str(stoploss_price),  # Trigger price for stop-loss
+                "quantity": str(quantity),
+            }
 
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(stoploss_limit_order_params)
@@ -444,14 +422,27 @@ class SmartApiDataProvider(DataProviderInterface):
         try:
             order_details = self.__smart.individual_order_details(uniqueOrderId)
             logger.info(f"order_details: {order_details}")
-            return order_details['data']['status'], order_details['data']['text']
+            return order_details["data"]["status"], order_details["data"]["text"]
         except Exception as e:
             logger.error(f"Individual order status failed due to {e}")
 
-    
+
 class IndicatorInterface:
-    def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0) -> tuple[Signal, float, List[str]]:
+    def check_indicators(
+        self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0
+    ) -> tuple[Signal, float, List[str]]:
         raise NotImplementedError("Subclasses must implement check_indicators()")
+
+
+def NumberOfStocksPurchased(data, total_amount):
+    lotsize = data["lotsize"]
+    price = data["strike"]
+
+    slot = lotsize * price
+    no_slots = int(total_amount / slot)
+    quantity_purchase = no_slots * lotsize
+
+    return quantity_purchase
 
 
 # main class of strategy
@@ -459,7 +450,7 @@ class MultiIndexStrategy(IndicatorInterface):
     def __init__(self):
         self.to_buy = False
         self.to_modify = False
-        self.waiting_to_modify = False 
+        self.waiting_to_modify = False
         self.waiting_for_buy = True
         self.to_sell = False
         self.waiting_to_sell = False
@@ -475,17 +466,19 @@ class MultiIndexStrategy(IndicatorInterface):
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
         ltp = ltp_value
 
-        token = str(passed_token).split(":")[-1] #this is actually symbol written as FINNIFTY23JUL2423500CE
-        symbol_token = str(passed_token).split(":")[1] #a five digit integer number to represent the actual token number for the symbol
+        token = str(passed_token).split(":")[-1]  # this is actually symbol written as FINNIFTY23JUL2423500CE
+        symbol_token = str(passed_token).split(":")[
+            1
+        ]  # a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token, ltp]
-        
+        print(data, token)
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
-                
-                current_candle = data.iloc[1] #latest candle formed
-                previous_candle = data.iloc[2] #last second candle formed
-                
+
+                current_candle = data.iloc[1]  # latest candle formed
+                previous_candle = data.iloc[2]  # last second candle formed
+
                 for i in range(1, constant.TRACE_CANDLE + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
@@ -501,17 +494,18 @@ class MultiIndexStrategy(IndicatorInterface):
                         self.trade_details["index"] = token
                         break
 
-                    elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])):
+                    elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
+                        float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
+                    ):
                         # No need to reassign current_candle and previous_candle here since it's already done above.
                         self.price = current_candle[constant.HIGH]
                         self.trading_price = current_candle[constant.HIGH]
                         self.trade_details["index"] = token
                         break
-                
-            
+
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
-                if  ltp > (constant.BUYING_MULTIPLIER * self.price):
+                if ltp > (constant.BUYING_MULTIPLIER * self.price):
                     self.to_buy = True
                     self.waiting_to_modify = True
                     self.waiting_to_modify_or_sell = True
@@ -544,36 +538,47 @@ class MultiIndexStrategy(IndicatorInterface):
             #         # modifying the stop loss
             #         return (Signal.MODIFY, self.price, index_info)
             #     else:
-            #         return (Signal.WAITING_TO_MODIFY, self.price, index_info) 
+            #         return (Signal.WAITING_TO_MODIFY, self.price, index_info)
 
             # direct selling condition
             if not self.waiting_for_buy:
-                if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details['success'] == True:
-                    
+                if (
+                    self.to_buy
+                    and self.waiting_to_modify_or_sell
+                    and self.trade_details["index"] == token
+                    and self.trade_details["success"] == True
+                ):
+
                     # finding max of three
                     stoploss_1 = self.stop_loss_price
                     stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
-                    stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * constant.SL_LOW_MULTIPLIER_2
+                    stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
-                    
+
                     if ltp >= (constant.TRAIL_SL_1 * self.price):
-                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+                        self.stop_loss_price = max(
+                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
+                        )
                         self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
-                    
+
                     elif ltp >= (constant.TRAIL_SL_2 * self.price):
-                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+                        self.stop_loss_price = max(
+                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
+                        )
                         self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
-                    
+
                     elif stoploss_condition_1 > self.stop_loss_price:
                         self.stop_loss_price = stoploss_condition_1
                         self.price = self.stop_loss_price
-                        logger.info(f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}")
+                        logger.info(
+                            f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}"
+                        )
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
-                    
+
                     elif ltp <= self.stop_loss_price:
                         self.trade_details["success"] = False
                         self.trade_details["index"] = None
@@ -594,14 +599,14 @@ class MultiIndexStrategy(IndicatorInterface):
 
             elif self.waiting_to_modify_or_sell:
                 return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.price, index_info)
-                    
+
             else:
                 self.waiting_for_buy = True
                 self.trade_details["success"] = False
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
         except Exception as exc:
             logger.error(f"An error occurred while checking indicators: {exc}")
-            return (Signal.NULL , 0, [])
+            return (Signal.NULL, 0, [])
 
 
 # to access objects of dataframe and dict kind
@@ -618,7 +623,7 @@ class BaseStrategy:
         data_provider: DataProviderInterface,
         indicator: MultiIndexStrategy,
         index_candle_durations: Dict[str, str],
-        extra_args: dict
+        extra_args: dict,
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -631,6 +636,18 @@ class BaseStrategy:
         self.token: Token
         self.stop_event = asyncio.Event()
         self.parameters = extra_args
+
+    # data = {
+    #         token: str,
+    #         symbol: str,
+    #         name: str,
+    #         expiry: str,
+    #         strike: float,
+    #         lotsize: int,
+    #         instrumenttype: str,
+    #         exch_seg: str,
+    #         tick_size: float,
+    #  }
 
     async def fetch_ltp_data(self):
         try:
@@ -651,18 +668,20 @@ class BaseStrategy:
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
-                candle_data = await async_return(self.data_provider.fetch_candle_data(self.token, interval=candle_duration))
+                candle_data = await async_return(
+                    self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
+                )
                 # candle_data = async_return(candle_data)
                 if candle_data is None:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
-                index_candle_data.append((str(instrument.symbol), candle_data))
+                constant.INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
         try:
-            for index, value in index_candle_data:
+            for index, value in constant.INDEX_CANDLE_DATA:
                 await asyncio.sleep(1)
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
@@ -673,25 +692,28 @@ class BaseStrategy:
                     signal, price_returned, index_info = await async_return(
                         self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                     )
-                    logger.info(f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}")
+                    logger.info(
+                        f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
+                    )
 
                     if signal == Signal.BUY:
-                        self.indicator.price = price_returned
-                        self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
-                        logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        # self.indicator.price = float(trade_book_full_response['fillprice'])
-                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        # logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
-                    
+                        # self.indicator.price = price_returned
+                        # self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
+                        # logger.info(
+                        #     f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                        # )
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price = float(trade_book_full_response['fillprice'])
+                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+
                     elif signal == Signal.SELL:
-                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
                         # self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
-                        
-                    
+                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+
                     # if not self.indicator.waiting_for_buy:
                     #     order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
                     #     logger.info(f"order_status: {order_status}, message: {text}")
@@ -702,8 +724,6 @@ class BaseStrategy:
                     #         self.indicator.to_modify = False
                     #         self.indicator.waiting_to_modify = False
                     #         logger.info("Stop-loss has been triggered")
-                
-                
 
                     # if signal == Signal.BUY:
 
@@ -713,9 +733,9 @@ class BaseStrategy:
                     #     await asyncio.sleep(1)
                     #     self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                     #     self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
-                        
+
                     #     logger.info(f"We got buying price at {self.indicator.price}")
-                        
+
                     #     if self.indicator.order_id:
                     #         logger.info(f"Market price at which we bought is {price}")
                     #         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price*0.95), (self.indicator.price*0.90)))
@@ -724,18 +744,18 @@ class BaseStrategy:
                     #         self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                     #         self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
                     #         logger.info(f"STOPP_LOSS added, {self.indicator.order_id}")
-                        
+
                     #     logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
-                    
+
                     # elif signal == Signal.MODIFY:
                     #     logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
                     #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
-                        
+
                     #     self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                     #     self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
-                        
+
                     #     logger.info(f"Order Status: {self.indicator.order_id} {trade_book_full_response}")
-                    
+
                     # if not self.indicator.waiting_for_buy:
                     #     order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
                     #     logger.info(f"order_status: {order_status}, message: {text}")
@@ -746,8 +766,7 @@ class BaseStrategy:
                     #         self.indicator.to_modify = False
                     #         self.indicator.waiting_to_modify = False
                     #         logger.info("Stop-loss has been triggered")
-                
-                
+
                 else:
                     logger.info("Waiting for data...")
         except Exception as e:
@@ -764,11 +783,7 @@ class BaseStrategy:
             raise
 
     async def run(self):
-        await asyncio.gather(
-            self.fetch_ltp_data_continuous(),
-            self.process_data_continuous(),
-            self.start()
-        )
+        await asyncio.gather(self.fetch_ltp_data_continuous(), self.process_data_continuous(), self.start())
 
     async def fetch_ltp_data_continuous(self):
         try:
@@ -791,6 +806,7 @@ class BaseStrategy:
     async def stop(self):
         self.stop_event.set()
 
+
 # Start strategy endpoint
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
@@ -798,8 +814,11 @@ async def start_strategy(strategy_params: StartStrategySchema):
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {}
         quantity_index = {}
+
         for index in strategy_params.index_list:
-            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.chart_time
+            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = (
+                index.chart_time
+            )
 
         for index in strategy_params.index_list:
             quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
@@ -819,15 +838,17 @@ async def start_strategy(strategy_params: StartStrategySchema):
         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
         max_transactions_indicator = MultiIndexStrategy()
-        strategy = BaseStrategy(instrument_reader, smart_api_provider, max_transactions_indicator, index_and_candle_durations, quantity_index)
+        strategy = BaseStrategy(
+            instrument_reader,
+            smart_api_provider,
+            max_transactions_indicator,
+            index_and_candle_durations,
+            quantity_index,
+        )
         task = asyncio.create_task(strategy.run(), name=strategy_id)
         # await save_strategy(strategy_params)
         tasks[strategy_id] = task
-        response = {
-            "message": "strategy starts",
-            "success": True,
-            "strategy_id": strategy_id
-        }
+        response = {"message": "strategy starts", "success": True, "strategy_id": strategy_id}
         logger.info("Response", response)
         return response
     except Exception as exc:
@@ -837,6 +858,7 @@ async def start_strategy(strategy_params: StartStrategySchema):
             "success": False,
         }
         return response
+
 
 # Stop strategy endpoint
 @router.get("/stop_strategy/{strategy_id}")
@@ -855,7 +877,7 @@ async def stop_strategy(strategy_id):
     return {"message": "Strategy stopped", "success": True}
 
 
-#get all trades with strik prices
+# get all trades with strik prices
 @router.get("/get-margin-calculator")
 def get_all_strike_prices():
     response = requests.get(NFO_DATA_URL)
@@ -864,4 +886,3 @@ def get_all_strike_prices():
     with open("data.json", "w") as json_file:
         json.dump(data, json_file, indent=4)
     return {"message": "all strike list", "success": True}
- 
