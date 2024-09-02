@@ -555,7 +555,6 @@ class MultiIndexStrategy(IndicatorInterface):
             # direct selling condition
             if not self.waiting_for_buy:
                 if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details['success'] == True:
-                    
                     # finding max of three
                     stoploss_1 = self.stop_loss_price
                     stoploss_2 = data.iloc[1]["Low"] * 0.97 
@@ -564,17 +563,20 @@ class MultiIndexStrategy(IndicatorInterface):
                     
                     if ltp >= (1.20*self.price):
                         self.stop_loss_price = max(round((self.price*1.10), 2), stoploss_condition_1)
+                        self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif ltp >= (1.10*self.price):
                         self.stop_loss_price = max(round((self.price * 1.05), 2), stoploss_condition_1)
+                        self.price = self.stop_loss_price
                         logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif stoploss_condition_1 > self.stop_loss_price:
                         self.stop_loss_price = stoploss_condition_1
-                        logger.info(f"Modifying the stop-loss according t o Low condition, New_SL={self.stop_loss_price}")
+                        self.price = self.stop_loss_price
+                        logger.info(f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}")
                         return (Signal.MODIFY, self.stop_loss_price, index_info)
                     
                     elif ltp <= self.stop_loss_price:
@@ -587,7 +589,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
                         self.to_sell = True
                         self.waiting_for_buy = True
-                        return (Signal.SELL, self.stop_loss_price, index_info)
+                        return (Signal.SELL, ltp, index_info)
                     else:
                         self.waiting_to_modify_or_sell = True
                         return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
@@ -678,16 +680,21 @@ class BaseStrategy:
                     )
                     logger.info(f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}")
 
-                    # if signal == Signal.BUY:
-                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                    #     self.indicator.price = float(trade_book_full_response['fillprice'])
-                    #     self.indicator.stop_loss_price = self.indicator.price * 0.95
-                    #     logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                    if signal == Signal.BUY:
+                        # self.indicator.price = price_returned
+                        # self.indicator.stop_loss_price = self.indicator.price * 0.95
+                        # logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price = float(trade_book_full_response['fillprice'])
+                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
                     
-                    # elif signal == Signal.SELL:
-                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
-                    #     self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                    #     logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                    elif signal == Signal.SELL:
+                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
                         
                     
                     # if not self.indicator.waiting_for_buy:
@@ -756,7 +763,6 @@ class BaseStrategy:
         try:
             while not self.stop_event.is_set():
                 await self.fetch_candle_data()
-                logger.info("fetch_candle_data continue")
                 await asyncio.sleep(10)  # fetch candle data every 10 seconds
         except asyncio.CancelledError:
             logger.info("start task was cancelled")
@@ -773,7 +779,6 @@ class BaseStrategy:
         try:
             while not self.stop_event.is_set():
                 await self.fetch_ltp_data()
-                logger.info("fetch_ltp_data_continuous continues")
                 await asyncio.sleep(1)  # fetch LTP data every second
         except asyncio.CancelledError:
             logger.info("fetch_ltp_data_continuous task was cancelled")
@@ -783,7 +788,6 @@ class BaseStrategy:
         try:
             while not self.stop_event.is_set():
                 await self.process_data()
-                logger.info("process_data_continuous continues")
                 await asyncio.sleep(1)  # fetch LTP data every second
         except asyncio.CancelledError:
             logger.info("process_data_continuous task was cancelled")
