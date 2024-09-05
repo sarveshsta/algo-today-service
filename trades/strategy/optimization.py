@@ -186,8 +186,7 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
             response = requests.get(self.url)
             response.raise_for_status()
             data = response.json()
-            trade_data = data
-            print(f"**********{data}************")
+
             with open("data.json", "w") as json_file:
                 json.dump(data, json_file, indent=4)
             return [Instrument(**item) for item in data if item["exch_seg"] == "NFO" and item["symbol"] in self.tokens]
@@ -411,11 +410,11 @@ class SmartApiDataProvider(DataProviderInterface):
             }
 
             # Method 1: Place an order and return the order ID
-            order_id = self.__smart.placeOrder(stoploss_limit_order_params)
-            logger.info(f"STOPLOSS ID: {order_id}")
-            sleep(1)
-            order_id, i = self.get_trade_book(order_id=order_id)
-            return order_id, i
+            # order_id = self.__smart.placeOrder(stoploss_limit_order_params)
+            # logger.info(f"STOPLOSS ID: {order_id}")
+            # sleep(1)
+            # order_id, i = self.get_trade_book(order_id=order_id)
+            # return order_id, i
         except Exception as e:
             logger.info(f"Stop loss Order place failed: {e}")
             raise ValueError(f"Stop-loss order failed, reason: {e}")
@@ -476,7 +475,6 @@ class MultiIndexStrategy(IndicatorInterface):
             1
         ]  # a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token, ltp]
-        print(data, token)
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
@@ -630,6 +628,8 @@ class BaseStrategy:
         index_candle_durations: Dict[str, str],
         extra_args: dict,
         extra_args_amount: dict,
+        current_profit: float,
+        target_profit: float
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -643,6 +643,12 @@ class BaseStrategy:
         self.stop_event = asyncio.Event()
         self.parameters = extra_args
         self.parameters_amount = extra_args_amount
+        self.lotsize: int
+        self.trading_quantity: int
+        self.buying_price: int
+        self.current_profit: int = current_profit
+        self.target_profit: int = target_profit
+
 
     # data = {
     #         token: str,
@@ -696,60 +702,82 @@ class BaseStrategy:
                     latest_candle = data.iloc[1]
 
                     # Implement your comparison logic here
-                    signal, price_returned, index_info = await async_return(
+                    if self.current_profit >= self.target_profit:
+                        
+                        break
+
+                    signal, self.indicator.price, index_info = await async_return(
                         self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
                     )
                     logger.info(
-                        f"SIGNAL:{signal}, PRICE:{price_returned}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
+                        f"SIGNAL:{signal}, PRICE:{self.indicator.price}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
                     )
-                    lotsize = 0
-                    # for item in data:
-                    #     if item["symbol"] == index_info:
-                    #         lotsize = item["lotsize"]
+
+                    print(f"*****{type(self.indicator.price)}*******")
+
+                    # print(f"**************{lotsize}***************")
 
                     if signal == Signal.BUY:
-                        # self.indicator.price = price_returned
+                        # self.indicator.price = self.indicator.price
                         # self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
                         # logger.info(
-                        #     f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                        #     f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
                         # )
-                        if self.parameters_amount[index] is None:
-                            self.indicator.order_id, trade_book_full_response = await async_return(
+                        
+                        
+
+                        if self.parameters_amount[index] == 0:
+                            self.trading_quantity = self.parameters[index]
+                            
+                        else:
+                            for instrument in self.instruments:
+                                if instrument.symbol == index:
+                                    self.lotsize = int(instrument.lotsize)
+
+                            amount = self.parameters_amount[index]
+                            number_of_stocks = int(amount / (self.indicator.price * self.lotsize))
+                            quantity = self.lotsize * number_of_stocks
+                            self.trading_quantity = quantity
+                            logger.info(f"Trade Quantity for {index} - {quantity}")
+                           
+                         
+                        self.indicator.order_id, trade_book_full_response = await async_return(
                                 self.data_provider.place_order(
                                     index_info[0],
                                     index_info[1],
                                     "BUY",
                                     "MARKET",
-                                    price_returned,
-                                    self.parameters[index],
+                                    self.indicator.price,
+                                    self.trading_quantity,
                                 )
                             )
-                        else:
-                            amount = self.parameters_amount[index]
-                            number_of_stocks = amount / (price_returned * lotsize)
-                            trading_quantity = lotsize * number_of_stocks
-                            self.indicator.order_id, trade_book_full_response = await async_return(
-                                self.data_provider.place_order(
-                                    index_info[0], index_info[1], "BUY", "MARKET", price_returned, trading_quantity
-                                )
-                            )
+                        
+                        self.buying_price = float(trade_book_full_response["fillprice"])
 
-                        self.indicator.price = float(trade_book_full_response["fillprice"])
-                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        logger.info(
-                            f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
-                        )
+                        # self.indicator.price = float(trade_book_full_response["fillprice"])
+                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        # logger.info(
+                        #     f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                        # )
 
                     elif signal == Signal.SELL:
                         # self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        # logger.info(f"TRADE SOLD at {self.indicator.price} in {index_info[0]}")
+                        
+
                         self.indicator.order_id, trade_book_full_response = await async_return(
                             self.data_provider.place_order(
-                                index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]
+                                index_info[0],
+                                index_info[1],
+                                "SELL",
+                                "MARKET",
+                                self.indicator.price,
+                                self.trading_quantity,
                             )
                         )
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
                         logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                        self.current_profit += (float(trade_book_full_response['fillprice'] - self.buying_price) * self.trading_quantity)
 
                     # if not self.indicator.waiting_for_buy:
                     #     order_status, text = await async_return(self.data_provider.check_order_status(self.indicator.uniqueOrderId))
@@ -764,7 +792,7 @@ class BaseStrategy:
 
                     # if signal == Signal.BUY:
 
-                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", self.indicator.price, self.parameters[index]))
                     #     self.indicator.price = float(trade_book_full_response['fillprice'])
 
                     #     await asyncio.sleep(1)
@@ -786,7 +814,7 @@ class BaseStrategy:
 
                     # elif signal == Signal.MODIFY:
                     #     logger.info(f"Order Status: {index_info} {Signal.MODIFY}")
-                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (price_returned), (price_returned*0.95) , self.indicator.order_id))
+                    #     self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.modify_stoploss_limit_order(index_info[0], index_info[1], self.parameters[index], (self.indicator.price), (self.indicator.price*0.95) , self.indicator.order_id))
 
                     #     self.indicator.order_id, order_book_full_response = await async_return(self.data_provider.get_order_book(self.indicator.order_id))
                     #     self.indicator.uniqueOrderId = order_book_full_response['uniqueorderid']
@@ -848,6 +876,8 @@ class BaseStrategy:
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
     try:
+        current_profit = 0.0
+        target_profit = strategy_params.target_profit
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {}
         quantity_index = {}
@@ -885,6 +915,8 @@ async def start_strategy(strategy_params: StartStrategySchema):
             index_and_candle_durations,
             quantity_index,
             amount_index,
+            current_profit,
+            target_profit,
         )
         task = asyncio.create_task(strategy.run(), name=strategy_id)
         # await save_strategy(strategy_params)
