@@ -30,7 +30,7 @@ class IndexData(BaseModel):
     option: str
     chart_time: str
     quantity: int | None
-    trading_amount : int
+    trading_amount : int | None
     class Config:
         from_attributes = True
 
@@ -38,7 +38,7 @@ class StartStrategySchema(BaseModel):
     user_id: str
     strategy_id: str
     index_list: list[IndexData]
-    
+    target_profit: int
     class Config:
         from_attributes = True
         
