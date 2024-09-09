@@ -1,13 +1,19 @@
+import asyncio
 import logging
-from typing import Dict, List
-from enum import Enum
 import os
 from datetime import datetime
-import asyncio
+from enum import Enum
+from typing import Dict, List
+
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+# from models import TradeDetails, TokenModel
+from config.database.config import get_db
+from trades.crud import save_tradedetails
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 
 def write_logs(type, index, price, status, reason):
@@ -40,6 +46,7 @@ class Signal(Enum):
     WAITING_TO_SELL = 4
     STOPLOSS = 5
 
+
 class Token:
     def __init__(self, exch_seg: str, token_id: str, symbol: str):
         self.exch_seg = exch_seg
@@ -49,17 +56,32 @@ class Token:
     def __str__(self):
         return f"{self.exch_seg}:{self.token_id}:{self.symbol}"
 
+
 def async_return(result):
     obj = asyncio.Future()
     obj.set_result(result)
-    return obj   
+    return obj
+
 
 class SignalTrigger:
     def __init__(self, data_provider) -> None:
         self.data_provider = data_provider
-    async def signal_trigger(self, data_provider, index_info, price, quantity, signal, order_id=None):
+
+    async def signal_trigger(
+        self, data_provider, index_info, price, quantity, signal, order_id=None, db: Session = Depends(get_db)
+    ):
         if signal == Signal.BUY:
             logger.info(f"signal buy")
+            stock_token = 0
+            # for instrument in self.instruments:
+            #     if instrument.symbol == index:
+            #         stock_token = int(instrument.token)
+
+            trade_data = {"user_id": 1, "token": "DGD", "signal": signal, "price": price}
+
+            save_tradedetails(db, trade_data)
+            # save_tradedetails()
+
             # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
             # if full_order_response:
             #     order_id, full_order_response = await async_return(data_provider.place_stoploss_limit_order(index_info[0], index_info[1], quantity, price, (price*0.99)))
@@ -75,6 +97,7 @@ class SignalTrigger:
         # await save_order(order_id, full_order_response)
         return "order_id"
 
+
 class FetchCandleLtpValeus:
     def __init__(self, index_candle_durations, data_provider, instruments, token):
         self.index_candle_durations = index_candle_durations
@@ -87,12 +110,14 @@ class FetchCandleLtpValeus:
         index_ltp_values: Dict[str, float] = {}
         try:
             for instrument in self.instruments:
-                data = ltp_candle_values(self.index_candle_durations, "LTP", instrument, self.data_provider, self.gen_token)
+                data = ltp_candle_values(
+                    self.index_candle_durations, "LTP", instrument, self.data_provider, self.gen_token
+                )
                 if data[f"{str(instrument.symbol)}_sym"] is None:
                     continue
                 index_ltp_values[str(instrument.symbol)] = data[f"{str(instrument.symbol)}_sym"]
                 self.token_value[str(instrument.symbol)] = data[f"{str(instrument.symbol)}_token"]
-                
+
             return (index_ltp_values, self.token_value)
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
@@ -103,7 +128,9 @@ class FetchCandleLtpValeus:
         # index_candle_data = {str, list}
         try:
             for instrument in self.instruments:
-                data = ltp_candle_values(self.index_candle_durations, "CANDLE", instrument, self.data_provider, self.gen_token)
+                data = ltp_candle_values(
+                    self.index_candle_durations, "CANDLE", instrument, self.data_provider, self.gen_token
+                )
                 if data[f"{str(instrument.symbol)}_sym"] is None:
                     continue
                 index_candle_data.append((str(instrument.symbol), data[f"{str(instrument.symbol)}_sym"]))

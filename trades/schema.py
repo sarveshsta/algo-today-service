@@ -15,6 +15,15 @@ class TokenSchema(BaseModel):
     class Config:
         from_attributes = True
 
+
+
+
+class TradeDetailsSchema(BaseModel):
+    user_id : str
+    token : str
+    signal : str
+    price : float
+
 class ExpirySchema(BaseModel):
     token: str
     symbol: str

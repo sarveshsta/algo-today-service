@@ -4,6 +4,7 @@ from fastapi import Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from config.database.config import get_db
+
 from trades.managers import *
 from trades.schema import ExpirySchema, TokenSchema, Order
 import logging
