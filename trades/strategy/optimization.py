@@ -283,14 +283,14 @@ class BaseStrategy:
                 logger.info(f"Signal: {signal}, Price: {price}")
                 if signal in [Signal.BUY, Signal.SELL, Signal.STOPLOSS]:
                     self.order_id = await self.signal_trigger.signal_trigger(
-                        data_provider=self.data_provider,
-                        index_info=index_info,
-                        price=price,
-                        quantity=self.parameters[index],
-                        signal=signal,
-                        order_id=self.order_id,  # Ensuring optional parameter is passed correctly
-                        index=index,
-                        instruments=self.instruments
+                        self.data_provider,
+                        index_info,
+                        price,
+                        self.parameters[index],
+                        signal, # Ensuring optional parameter is passed correctly
+                        index, 
+                        self.instruments,
+                        self.order_id
                     )
                     #self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id, index, self.instruments)
             else:

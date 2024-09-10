@@ -7,7 +7,7 @@ from typing import Dict, List
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
-
+from trades.schema import TradeDetailsSchema
 # from models import TradeDetails, TokenModel
 from config.database.config import get_db
 from trades.crud import save_tradedetails
@@ -15,7 +15,7 @@ from trades.crud import save_tradedetails
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-Session = Depends(get_db)
+
 
 
 def write_logs(type, index, price, status, reason):
@@ -78,8 +78,8 @@ class SignalTrigger:
                     self.stock_token = int(instrument.token)
 
             trade_data = {"user_id": 1, "token": self.stock_token, "signal": signal, "price": price}
-
-            save_tradedetails(trade_data, Session)
+            data = TradeDetailsSchema(**trade_data)
+            save_tradedetails(data)
 
 
             # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
@@ -93,8 +93,8 @@ class SignalTrigger:
                     self.stock_token = int(instrument.token)
 
             trade_data = {"user_id": 1, "token": self.stock_token, "signal": signal, "price": price}
-
-            save_tradedetails(trade_data, Session)
+            data = TradeDetailsSchema(**trade_data)
+            save_tradedetails(data)
             # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, quantity))
 
         elif signal == Signal.STOPLOSS:

@@ -4,7 +4,7 @@ from fastapi import Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from config.database.config import get_db
-
+from trades.models import TradeDetails
 from trades.managers import *
 from trades.schema import ExpirySchema, TokenSchema, Order
 import logging
@@ -53,7 +53,8 @@ async def get_fetch_previous_orders(db: Session = Depends(get_db)):
     return JSONResponse({"success": True, "data":response}, status_code=200)
 
 # from .strategy import BaseStrategy, max_transactions_indicator, instrument_reader, smart_api_provider
-@router.get('/trades/')
-def get_trade_details(db: Session = Depends(get_db)):
-    return JSONResponse({"success":True})
-
+@router.get('/trades/{trade_id}')
+def get_trade_details(trade_id: int, db: Session = Depends(get_db)):
+    trade_details = db.query(TradeDetails).filter(TradeDetails.id == trade_id)
+    return trade_details
+    

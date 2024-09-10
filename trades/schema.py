@@ -24,6 +24,9 @@ class TradeDetailsSchema(BaseModel):
     signal : str
     price : float
 
+    class Config:
+        from_attributes = True
+
 class ExpirySchema(BaseModel):
     token: str
     symbol: str
