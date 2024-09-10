@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .models import TradeDetails
 from .schema import TradeDetailsSchema
 
-def save_tradedetails(db: Session, trade_data: TradeDetailsSchema) -> TradeDetails:
+def save_tradedetails(trade_data: TradeDetailsSchema, db: Session) -> TradeDetails:
     # Create TradeDetails instance dynamically using the schema data
     trade_details = TradeDetails(
         user_id=trade_data.user_id,
@@ -16,7 +16,7 @@ def save_tradedetails(db: Session, trade_data: TradeDetailsSchema) -> TradeDetai
         signal=trade_data.signal,
         price=trade_data.price
     )
-    
+
     # Add the new record to the session and commit
     try:
         db.add(trade_details)

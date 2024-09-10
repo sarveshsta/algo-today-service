@@ -58,7 +58,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
-                if ltp > (1.01 * self.price):
+                if ltp*1000 > (1.01 * self.price):
                     self.to_buy = True
                     self.waiting_for_sell = True
 
@@ -76,11 +76,11 @@ class MultiIndexStrategy(IndicatorInterface):
                     )
 
                     stoploss_1 = (0.95 * self.price)
-                    stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                    stoploss_2 = data.iloc[1]["Low"] * 0.97
                     stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
                     logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
                     final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
-                    self.price = round(final_stoploss, 1)  
+                    self.price = round(final_stoploss, 1)
 
                     return (Signal.BUY, self.price, index_info)
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
@@ -105,10 +105,10 @@ class MultiIndexStrategy(IndicatorInterface):
                     return Signal.SELL, self.price, index_info
 
                 stoploss_1 = (0.95 * self.price)
-                stoploss_2 = data.iloc[1]["Low"] * 0.97 
+                stoploss_2 = data.iloc[1]["Low"] * 0.97
                 stoploss_3 = min([data.iloc[1]['Low'], data.iloc[2]['Low']]) * 0.99
                 logger.info(f"STOPLOSS Prices {stoploss_1} { stoploss_2} {stoploss_3}")
-                
+
                 final_stoploss = max([stoploss_1, stoploss_2, stoploss_3])
 
                 if final_stoploss < self.price:

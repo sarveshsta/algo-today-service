@@ -222,7 +222,7 @@ class SmartApiDataProvider(DataProviderInterface):
                 "quantity": str(quantity),
             }
 
-  
+
             # Method 1: Place an order and return the order ID
             order_id = self.__smart.placeOrder(stoploss_limit_order_params)
             logger.info(f"ORDER STOPLOSS id : {order_id}")
@@ -282,7 +282,17 @@ class BaseStrategy:
                 )
                 logger.info(f"Signal: {signal}, Price: {price}")
                 if signal in [Signal.BUY, Signal.SELL, Signal.STOPLOSS]:
-                    self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id)  
+                    self.order_id = await self.signal_trigger.signal_trigger(
+                        data_provider=self.data_provider,
+                        index_info=index_info,
+                        price=price,
+                        quantity=self.parameters[index],
+                        signal=signal,
+                        order_id=self.order_id,  # Ensuring optional parameter is passed correctly
+                        index=index,
+                        instruments=self.instruments
+                    )
+                    #self.order_id = await self.signal_trigger.signal_trigger(self.data_provider, index_info, price, self.parameters[index], signal, self.order_id, index, self.instruments)
             else:
                 logger.info("Waiting for data...")
 

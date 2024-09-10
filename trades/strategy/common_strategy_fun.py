@@ -15,6 +15,8 @@ from trades.crud import save_tradedetails
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+Session = Depends(get_db)
+
 
 def write_logs(type, index, price, status, reason):
     log_dir = f"logs/trade/{datetime.today().strftime('%Y-%m-%d')}"
@@ -66,21 +68,19 @@ def async_return(result):
 class SignalTrigger:
     def __init__(self, data_provider) -> None:
         self.data_provider = data_provider
+        self.stock_token: int
 
-    async def signal_trigger(
-        self, data_provider, index_info, price, quantity, signal, order_id=None, db: Session = Depends(get_db)
-    ):
+    async def signal_trigger(self, data_provider, index_info, price, quantity, signal, index, instruemnts, order_id=None):
         if signal == Signal.BUY:
             logger.info(f"signal buy")
-            stock_token = 0
-            # for instrument in self.instruments:
-            #     if instrument.symbol == index:
-            #         stock_token = int(instrument.token)
+            for instrument in instruemnts:
+                if instrument.symbol == index:
+                    self.stock_token = int(instrument.token)
 
-            trade_data = {"user_id": 1, "token": "DGD", "signal": signal, "price": price}
+            trade_data = {"user_id": 1, "token": self.stock_token, "signal": signal, "price": price}
 
-            save_tradedetails(db, trade_data)
-            # save_tradedetails()
+            save_tradedetails(trade_data, Session)
+
 
             # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price, quantity))
             # if full_order_response:
@@ -88,6 +88,13 @@ class SignalTrigger:
 
         elif signal == Signal.SELL:
             logger.info(f"signal sell")
+            for instrument in instruemnts:
+                if instrument.symbol == index:
+                    self.stock_token = int(instrument.token)
+
+            trade_data = {"user_id": 1, "token": self.stock_token, "signal": signal, "price": price}
+
+            save_tradedetails(trade_data, Session)
             # order_id, full_order_response = await async_return(data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price, quantity))
 
         elif signal == Signal.STOPLOSS:
