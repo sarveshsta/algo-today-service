@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from config.database.config import get_db
 from trades.models import TradeDetails
 from trades.managers import *
-from trades.schema import ExpirySchema, TokenSchema, Order
+from trades.schema import ExpirySchema, TokenSchema, Order, TradeDetailsSchema
 import logging
+
+
 
 router = fastapi.APIRouter()
 
@@ -53,8 +55,11 @@ async def get_fetch_previous_orders(db: Session = Depends(get_db)):
     return JSONResponse({"success": True, "data":response}, status_code=200)
 
 # from .strategy import BaseStrategy, max_transactions_indicator, instrument_reader, smart_api_provider
-@router.get('/trades/{trade_id}')
+
+@router.get('/{trade_id}', response_model=List[TradeDetailsSchema])
 def get_trade_details(trade_id: int, db: Session = Depends(get_db)):
-    trade_details = db.query(TradeDetails).filter(TradeDetails.id == trade_id)
+    trade_details = db.query(TradeDetails).filter(TradeDetails.id == trade_id).first()
+    # if not trade_details:
+    #     raise HTTPException(status_code=404, detail="Trade not found")
     return trade_details
-    
+
