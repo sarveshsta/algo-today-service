@@ -1,13 +1,15 @@
+import logging
 from typing import List
+
 import fastapi
 from fastapi import Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+
 from config.database.config import get_db
-from trades.models import TradeDetails
 from trades.managers import *
-from trades.schema import ExpirySchema, TokenSchema, Order
-import logging
+from trades.models import TradeDetails
+from trades.schema import ExpirySchema, Order, TokenSchema, TradeDetailsSchema
 
 router = fastapi.APIRouter()
 
@@ -32,6 +34,17 @@ def create_index_tokens(db: Session = Depends(get_db)):
     return JSONResponse({"success": True}, status_code=201)
 
 
+@router.get('/trades_details/', response_model=List[TradeDetailsSchema])
+async def get_trade_details(db: Session = Depends(get_db)):
+    # Fetch trade details by ID
+    trade_details = db.query(TradeDetails).all()
+    if trade_details:
+        # FastAPI will automatically convert to the TradeDetailsSchema model
+        return trade_details
+    else:
+        raise fastapi.HTTPException(status_code=404, detail="Trade not found")
+
+
 @router.get('/{index}', response_model=List[ExpirySchema])
 async def get_index_expiry(index:str, db: Session = Depends(get_db)):
     response = retrieve_expiry(index, db)
@@ -52,9 +65,5 @@ async def get_fetch_previous_orders(db: Session = Depends(get_db)):
     if not response:  return JSONResponse({"success": False, "data":response}, status_code=404)
     return JSONResponse({"success": True, "data":response}, status_code=200)
 
-# from .strategy import BaseStrategy, max_transactions_indicator, instrument_reader, smart_api_provider
-@router.get('/trades/{trade_id}')
-def get_trade_details(trade_id: int, db: Session = Depends(get_db)):
-    trade_details = db.query(TradeDetails).filter(TradeDetails.id == trade_id)
-    return trade_details
-    
+
+  
