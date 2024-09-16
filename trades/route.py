@@ -5,7 +5,7 @@ import fastapi
 from fastapi import Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-
+from sqlalchemy.orm import joinedload
 from config.database.config import get_db
 from trades.managers import *
 from trades.models import TradeDetails
@@ -36,15 +36,15 @@ def create_index_tokens(db: Session = Depends(get_db)):
 
 @router.get('/trades_details/', response_model=List[TradeDetailsSchema])
 async def get_trade_details(db: Session = Depends(get_db)):
-    # Fetch trade details by ID
-    trade_details = db.query(TradeDetails).all()
-    if trade_details:
-        # FastAPI will automatically convert to the TradeDetailsSchema model
-        return trade_details
-    else:
-        raise fastapi.HTTPException(status_code=404, detail="Trade not found")
+    # Fetch all trades and their related tokens using joinedload
+    trades = db.query(TradeDetails).options(joinedload(TradeDetails.token)).all()
 
+    # If no trades are found, raise a 404 error
+    if not trades:
+        raise HTTPException(status_code=404, detail="No trades found")
 
+    # Return the list of trades directly, FastAPI will use the response_model to serialize
+    return trades
 @router.get('/{index}', response_model=List[ExpirySchema])
 async def get_index_expiry(index:str, db: Session = Depends(get_db)):
     response = retrieve_expiry(index, db)

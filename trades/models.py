@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, ForeignKey, Date
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 from core.mixins import CoreBaseModel
 
@@ -35,10 +35,15 @@ class TradeDetails(CoreBaseModel, Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, index=True)
-    token = Column(String, ForeignKey("tokens.token"), nullable=False)
     signal = Column(String, nullable=False)
     price = Column(Float, nullable=False)
     trade_time = Column(DateTime, default=datetime.now())
+
+        # ForeignKey relationship with the TokenModel
+    token_id = Column(String, ForeignKey("tokens.token"), nullable=False)
+    
+    # Define relationship with TokenModel for easy access to token data
+    token = relationship("TokenModel", backref="trades")
 
 class Order(Base):
     __tablename__ = "orders"
