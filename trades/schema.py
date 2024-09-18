@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 
 class TokenSchema(BaseModel):
@@ -14,6 +15,29 @@ class TokenSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TradeDetailsSchema(BaseModel):
+    id: int
+    user_id: str
+    signal: str
+    price: float
+    trade_time: datetime  # You can use datetime and let FastAPI format it
+    token: TokenSchema
+
+    class Config:
+        orm_mode = True
+
+class TradeDetailsSchema(BaseModel):
+    id: int
+    user_id: str
+    signal: str
+    price: float
+    trade_time: datetime  # You can use datetime and let FastAPI format it
+    token_id: str 
+
+    class Config:
+        orm_mode = True
+
 
 class ExpirySchema(BaseModel):
     token: str
