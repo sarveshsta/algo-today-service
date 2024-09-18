@@ -9,6 +9,7 @@ from json.decoder import JSONDecodeError
 from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
+
 #from curd import save_trade
 import fastapi
 import pandas as pd
@@ -17,10 +18,11 @@ import requests
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from SmartApi import SmartConnect
+
+from config.database.config import SessionLocal
 from trades.models import TradeDetails
 from trades.schema import StartStrategySchema
 from trades.strategy.utility import place_order_mail, save_order, save_strategy
-from config.database.config import SessionLocal
 
 router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
@@ -507,7 +509,7 @@ class MultiIndexStrategy(IndicatorInterface):
             
             # buying conditions
             if not self.to_buy and token == self.trade_details["index"]:
-                if  ltp > (constant.BUYING_MULTIPLIER * self.price):
+                if  ltp*1000 > (constant.BUYING_MULTIPLIER * self.price):
                     self.to_buy = True
                     self.waiting_to_modify = True
                     self.waiting_to_modify_or_sell = True
@@ -704,6 +706,70 @@ class BaseStrategy:
                     
                     if signal == Signal.BUY:
                         # uncomment to start paper trading
+                        def save_trade(new_trade: TradeDetails):
+                            global db
+                            db.add(new_trade)
+                            db.commit()
+                            db.refresh(new_trade)
+                            return new_trade
+
+                        def initialize_db():
+                            global db
+                            db = SessionLocal()
+                        
+                        initialize_db()
+
+                        if signal == Signal.BUY:
+                            self.indicator.price = self.indicator.price
+                            self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
+                            logger.info(
+                                f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                            )
+                            
+                            for instrument in self.instruments:
+                                    if instrument.symbol == index:
+                                        self.token_id = instrument.token
+
+
+                            if self.parameters_amount[index] == 0:
+                                self.trading_quantity = self.parameters[index]
+                                
+                            else:
+                                for instrument in self.instruments:
+                                    if instrument.symbol == index:
+                                        self.lotsize = int(instrument.lotsize)
+                                        #self.token_id = instrument.token
+
+                                amount = self.parameters_amount[index]
+                                number_of_stocks = int(amount / (self.indicator.price * self.lotsize))
+                                quantity = self.lotsize * number_of_stocks
+                                self.trading_quantity = quantity
+                                logger.info(f"Trade Quantity for {index} - {quantity}")
+                            
+                            current_time = datetime.now()
+
+                            new_trade = TradeDetails(
+                                user_id=1,
+                                signal="BUY",
+                                price=self.indicator.price,
+                                trade_time=current_time,
+                                token_id=self.token_id
+                            ) 
+
+                            saved_trade =save_trade(new_trade)
+                            print(f"#############{saved_trade}###############")
+                            self.indicator.order_id, trade_book_full_response = await async_return(
+                                    self.data_provider.place_order(
+                                        index_info[0],
+                                        index_info[1],
+                                        "BUY",
+                                        "MARKET",
+                                        self.indicator.price,
+                                        self.trading_quantity,
+                                    )
+                                )
+
+                        
                         self.indicator.price = price_returned
                         self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
                         logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
@@ -716,6 +782,23 @@ class BaseStrategy:
                     
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
+
+                        for instrument in self.instruments:
+                            if instrument.symbol == index:
+                                self.token_id = instrument.token
+
+                        current_time = datetime.now()
+
+                        new_trade = TradeDetails(
+                                user_id=1,
+                                signal="SELL",
+                                price=self.indicator.price,
+                                trade_time=current_time,
+                                token_id=self.token_id
+                            ) 
+
+                        saved_trade =save_trade(new_trade)
+
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
                         logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
 
