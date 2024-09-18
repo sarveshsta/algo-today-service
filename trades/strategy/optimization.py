@@ -709,10 +709,10 @@ class BaseStrategy:
                         logger.info(f"Trade BOUGHT at {price_returned} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
                         
                         # uncomment to start actual trading
-                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        self.indicator.price = float(trade_book_full_response['fillprice'])
-                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        # self.indicator.price = float(trade_book_full_response['fillprice'])
+                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        # logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
                     
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
