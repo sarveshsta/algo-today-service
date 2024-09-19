@@ -94,7 +94,11 @@ async def read_root():
 origins = ["localhost:3000",
            "http://127.0.0.1:3000",
            "http://localhost:3000",
-           "127.0.0.1:3000"
+           "127.0.0.1:3000",
+           "http://65.2.33.152",
+           "*",
+
+
     'https://9ffb-2405-201-301d-f063-58bf-34e3-962e-9c6c.ngrok-free.app']
 
 app.add_middleware(
