@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from trades.models import TradeDetails
 from config.database.config import get_db
 from trades.managers import *
-from trades.schema import ExpirySchema, TokenSchema, Order, TradeDetailsSchema
+from trades.schema import ExpirySchema, TokenSchema, Order, TradeDetailsSchema, TradeDetailSchema
 
 router = fastapi.APIRouter()
 
@@ -30,7 +30,7 @@ def create_index_tokens(db: Session = Depends(get_db)):
     return JSONResponse({"success": True}, status_code=201)
 
 
-@router.get('/trades_details/', response_model=List[TradeDetailsSchema])
+@router.get('/trades_details/', response_model=List[TradeDetailSchema])
 async def get_trade_details(db: Session = Depends(get_db)):
     # Fetch all trades and their related tokens using joinedload
     trades = db.query(TradeDetails).options(joinedload(TradeDetails.token)).all()

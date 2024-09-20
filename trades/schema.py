@@ -16,7 +16,7 @@ class TokenSchema(BaseModel):
     class Config:
         from_attributes = True
 
-class TradeDetailsSchema(BaseModel):
+class TradeDetailSchema(BaseModel):
     id: int
     user_id: str
     signal: str
