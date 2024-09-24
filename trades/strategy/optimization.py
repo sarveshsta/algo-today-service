@@ -192,7 +192,8 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
             response = requests.get(self.url)
             response.raise_for_status()
             data = response.json()
-
+            print(data)
+            print("read instruments working")
             with open("data.json", "w") as json_file:
                 json.dump(data, json_file, indent=4)
             return [Instrument(**item) for item in data if item["exch_seg"] == "NFO" and item["symbol"] in self.tokens]
@@ -684,6 +685,7 @@ class BaseStrategy:
 
     async def fetch_candle_data(self):
         try:
+            print(f"***************{len(self.instruments)}********")
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
