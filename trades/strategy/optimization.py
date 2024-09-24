@@ -771,7 +771,7 @@ class BaseStrategy:
                         )
                         print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
-                       
+
                         # self.indicator.order_id, trade_book_full_response = await async_return(
                         #         self.data_provider.place_order(
                         #             index_info[0],
@@ -783,7 +783,7 @@ class BaseStrategy:
                         #         )
                         #     )
 
-                        #await place_order_mail(db)
+                        # await place_order_mail(db)
 
                         # uncomment to start actual trading
                         # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
@@ -793,7 +793,7 @@ class BaseStrategy:
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
-                        #await place_order_mail()
+                        # await place_order_mail()
 
                         for instrument in self.instruments:
                             if instrument.symbol == index:
@@ -877,6 +877,7 @@ class BaseStrategy:
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
     try:
+        print("STRATEGY PARAMS", strategy_params)
         current_profit = 0.0
         target_profit = strategy_params.target_profit
         strategy_id = strategy_params.strategy_id
