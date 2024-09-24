@@ -685,7 +685,7 @@ class BaseStrategy:
 
     async def fetch_candle_data(self):
         try:
-            print(f"***************{len(self.instruments)}********")
+            print(f"***************{self.instruments}********")
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
@@ -697,6 +697,7 @@ class BaseStrategy:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 constant.INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
+                print("CONSTANT INDEX VALUE", constant.INDEX_CANDLE_DATA)
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
@@ -711,6 +712,7 @@ class BaseStrategy:
                     data = pd.DataFrame(value, columns=columns)
                     print(data)
                     latest_candle = data.iloc[1]
+
 
                     # Implement your comparison logic here
                     if self.current_profit >= self.target_profit:
