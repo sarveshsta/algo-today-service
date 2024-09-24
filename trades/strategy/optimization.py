@@ -773,7 +773,7 @@ class BaseStrategy:
                             trade_time=current_time,
                             token_id=self.token_id,
                         )
-                        print(f"#############{saved_trade}###############")
+                        #print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
                        
                         # self.indicator.order_id, trade_book_full_response = await async_return(
