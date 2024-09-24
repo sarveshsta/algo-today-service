@@ -702,6 +702,7 @@ class BaseStrategy:
         print("calling process data")
         try:
             for index, value in constant.INDEX_CANDLE_DATA:
+                print("INDEX, value", index, value)
                 await asyncio.sleep(1)
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
@@ -771,7 +772,7 @@ class BaseStrategy:
                         )
                         print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
-
+                       
                         # self.indicator.order_id, trade_book_full_response = await async_return(
                         #         self.data_provider.place_order(
                         #             index_info[0],
@@ -783,7 +784,7 @@ class BaseStrategy:
                         #         )
                         #     )
 
-                        # await place_order_mail(db)
+                        #await place_order_mail(db)
 
                         # uncomment to start actual trading
                         # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
@@ -793,7 +794,7 @@ class BaseStrategy:
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
-                        # await place_order_mail()
+                        #await place_order_mail()
 
                         for instrument in self.instruments:
                             if instrument.symbol == index:
