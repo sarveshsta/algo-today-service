@@ -192,7 +192,6 @@ class OpenApiInstrumentReader(InstrumentReaderInterface):
             response = requests.get(self.url)
             response.raise_for_status()
             data = response.json()
-            print(data)
             print("read instruments working")
             with open("data.json", "w") as json_file:
                 json.dump(data, json_file, indent=4)
@@ -685,7 +684,7 @@ class BaseStrategy:
 
     async def fetch_candle_data(self):
         try:
-            print(f"***************{self.instruments}********")
+            #print(f"***************{self.instruments}********")
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
@@ -697,7 +696,7 @@ class BaseStrategy:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 constant.INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
-                print("CONSTANT INDEX VALUE", constant.INDEX_CANDLE_DATA)
+                #print("CONSTANT INDEX VALUE", constant.INDEX_CANDLE_DATA)
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
@@ -705,12 +704,12 @@ class BaseStrategy:
         print("calling process data")
         try:
             for index, value in constant.INDEX_CANDLE_DATA:
-                print("INDEX, value", index, value)
+                #print("INDEX, value", index, value)
                 await asyncio.sleep(1)
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(value, columns=columns)
-                    print(data)
+                    #print(data)
                     latest_candle = data.iloc[1]
 
 
