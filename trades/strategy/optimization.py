@@ -706,6 +706,7 @@ class BaseStrategy:
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(value, columns=columns)
+                    print(data)
                     latest_candle = data.iloc[1]
 
                     # Implement your comparison logic here
@@ -768,9 +769,9 @@ class BaseStrategy:
                             trade_time=current_time,
                             token_id=self.token_id,
                         )
-
-                        saved_trade = save_trade(new_trade)
                         print(f"#############{saved_trade}###############")
+                        saved_trade = save_trade(new_trade)
+                       
                         # self.indicator.order_id, trade_book_full_response = await async_return(
                         #         self.data_provider.place_order(
                         #             index_info[0],
