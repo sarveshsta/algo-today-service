@@ -9,7 +9,7 @@ from json.decoder import JSONDecodeError
 from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
-
+from .multiple_strategy import MultiIndexStrategy
 # from curd import save_trade
 import fastapi
 import pandas as pd
@@ -251,7 +251,8 @@ class SmartApiDataProvider(DataProviderInterface):
         }
         res_json = self.__smart.getCandleData(historic_params)
         data = res_json["data"][::-1]
-        return data[:15]
+        # return data[:15]
+        return data
 
     def fetch_ltp_data(self, token):
         ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
@@ -436,11 +437,11 @@ class SmartApiDataProvider(DataProviderInterface):
             logger.error(f"Individual order status failed due to {e}")
 
 
-class IndicatorInterface:
-    def check_indicators(
-        self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0
-    ) -> tuple[Signal, float, List[str]]:
-        raise NotImplementedError("Subclasses must implement check_indicators()")
+# class IndicatorInterface:
+#     def check_indicators(
+#         self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0
+#     ) -> tuple[Signal, float, List[str]]:
+#         raise NotImplementedError("Subclasses must implement check_indicators()")
 
 
 def NumberOfStocksPurchased(data, total_amount):
@@ -455,167 +456,167 @@ def NumberOfStocksPurchased(data, total_amount):
 
 
 # main class of strategy
-class MultiIndexStrategy(IndicatorInterface):
-    def __init__(self):
-        self.to_buy = False
-        self.to_modify = False
-        self.waiting_to_modify = False
-        self.waiting_for_buy = True
-        self.to_sell = False
-        self.waiting_to_sell = False
-        self.waiting_to_modify_or_sell = False
-        self.stop_loss_price = 0.0
-        self.price = 0.0
-        self.trading_price = 0
-        self.order_id = "000000000000"
-        self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-        self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
+# class MultiIndexStrategy(IndicatorInterface):
+#     def __init__(self):
+#         self.to_buy = False
+#         self.to_modify = False
+#         self.waiting_to_modify = False
+#         self.waiting_for_buy = True
+#         self.to_sell = False
+#         self.waiting_to_sell = False
+#         self.waiting_to_modify_or_sell = False
+#         self.stop_loss_price = 0.0
+#         self.price = 0.0
+#         self.trading_price = 0
+#         self.order_id = "000000000000"
+#         self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+#         self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
 
-    # this is our main strategy function
-    def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
-        ltp = ltp_value
+#     # this is our main strategy function
+#     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
+#         ltp = ltp_value
 
-        token = str(passed_token).split(":")[-1]  # this is actually symbol written as FINNIFTY23JUL2423500CE
-        symbol_token = str(passed_token).split(":")[
-            1
-        ]  # a five digit integer number to represent the actual token number for the symbol
-        index_info = [token, symbol_token, ltp]
+#         token = str(passed_token).split(":")[-1]  # this is actually symbol written as FINNIFTY23JUL2423500CE
+#         symbol_token = str(passed_token).split(":")[
+#             1
+#         ]  # a five digit integer number to represent the actual token number for the symbol
+#         index_info = [token, symbol_token, ltp]
 
-        try:
-            # checking for pre buying condition
-            if self.waiting_for_buy == True:
+#         try:
+#             # checking for pre buying condition
+#             if self.waiting_for_buy == True:
 
-                current_candle = data.iloc[1]  # latest candle formed
-                previous_candle = data.iloc[2]  # last second candle formed
+#                 current_candle = data.iloc[1]  # latest candle formed
+#                 previous_candle = data.iloc[2]  # last second candle formed
 
-                for i in range(1, constant.TRACE_CANDLE + 1):
-                    current_candle = data.iloc[i]
-                    previous_candle = data.iloc[i + 1]
+#                 for i in range(1, constant.TRACE_CANDLE + 1):
+#                     current_candle = data.iloc[i]
+#                     previous_candle = data.iloc[i + 1]
 
-                    if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
-                        high_values = [float(data.iloc[j][constant.HIGH]) for j in range(i, 1, -1)]
-                        try:
-                            max_high = max(high_values)
-                        except:
-                            max_high = current_candle[constant.HIGH]
-                        self.price = max_high
-                        self.trading_price = max_high
-                        self.trade_details["index"] = token
-                        break
+#                     if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
+#                         high_values = [float(data.iloc[j][constant.HIGH]) for j in range(i, 1, -1)]
+#                         try:
+#                             max_high = max(high_values)
+#                         except:
+#                             max_high = current_candle[constant.HIGH]
+#                         self.price = max_high
+#                         self.trading_price = max_high
+#                         self.trade_details["index"] = token
+#                         break
 
-                    elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
-                        float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
-                    ):
-                        # No need to reassign current_candle and previous_candle here since it's already done above.
-                        self.price = current_candle[constant.HIGH]
-                        self.trading_price = current_candle[constant.HIGH]
-                        self.trade_details["index"] = token
-                        break
+#                     elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
+#                         float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
+#                     ):
+#                         # No need to reassign current_candle and previous_candle here since it's already done above.
+#                         self.price = current_candle[constant.HIGH]
+#                         self.trading_price = current_candle[constant.HIGH]
+#                         self.trade_details["index"] = token
+#                         break
 
-            # buying conditions
-            if not self.to_buy and token == self.trade_details["index"]:
-                if ltp > (constant.BUYING_MULTIPLIER * self.price):
-                    self.to_buy = True
-                    self.waiting_to_modify = True
-                    self.waiting_to_modify_or_sell = True
+#             # buying conditions
+#             if not self.to_buy and token == self.trade_details["index"]:
+#                 if ltp > (constant.BUYING_MULTIPLIER * self.price):
+#                     self.to_buy = True
+#                     self.waiting_to_modify = True
+#                     self.waiting_to_modify_or_sell = True
 
-                    self.waiting_for_buy = False
+#                     self.waiting_for_buy = False
 
-                    self.price = ltp
-                    self.trade_details["success"] = True
-                    self.trade_details["index"] = token
+#                     self.price = ltp
+#                     self.trade_details["success"] = True
+#                     self.trade_details["index"] = token
 
-                    self.trade_details["datetime"] = datetime.now()
+#                     self.trade_details["datetime"] = datetime.now()
 
-                    write_logs(
-                        "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
-                    )
+#                     write_logs(
+#                         "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
+#                     )
 
-                    return (Signal.BUY, self.price, index_info)
-                return (Signal.WAITING_TO_BUY, self.price, index_info)
+#                     return (Signal.BUY, self.price, index_info)
+#                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
-            # # modify stop loss conditions
-            # elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
-            #     if ltp > (self.price*1.20):
-            #         logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
-            #         self.price = ltp
-            #         # modifying the stop loss
-            #         return (Signal.MODIFY, self.price, index_info)
-            #     elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
-            #         logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
-            #         self.price = self.stop_loss_price
-            #         # modifying the stop loss
-            #         return (Signal.MODIFY, self.price, index_info)
-            #     else:
-            #         return (Signal.WAITING_TO_MODIFY, self.price, index_info)
+#             # # modify stop loss conditions
+#             # elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
+#             #     if ltp > (self.price*1.20):
+#             #         logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
+#             #         self.price = ltp
+#             #         # modifying the stop loss
+#             #         return (Signal.MODIFY, self.price, index_info)
+#             #     elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
+#             #         logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
+#             #         self.price = self.stop_loss_price
+#             #         # modifying the stop loss
+#             #         return (Signal.MODIFY, self.price, index_info)
+#             #     else:
+#             #         return (Signal.WAITING_TO_MODIFY, self.price, index_info)
 
-            # direct selling condition
-            if not self.waiting_for_buy:
-                if (
-                    self.to_buy
-                    and self.waiting_to_modify_or_sell
-                    and self.trade_details["index"] == token
-                    and self.trade_details["success"] == True
-                ):
+#             # direct selling condition
+#             if not self.waiting_for_buy:
+#                 if (
+#                     self.to_buy
+#                     and self.waiting_to_modify_or_sell
+#                     and self.trade_details["index"] == token
+#                     and self.trade_details["success"] == True
+#                 ):
 
-                    # finding max of three
-                    stoploss_1 = self.stop_loss_price
-                    stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
-                    stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
-                    stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
+#                     # finding max of three
+#                     stoploss_1 = self.stop_loss_price
+#                     stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
+#                     stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
+#                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
 
-                    if ltp >= (constant.TRAIL_SL_1 * self.price):
-                        self.stop_loss_price = max(
-                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
-                        )
-                        self.price = self.stop_loss_price
-                        logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+#                     if ltp >= (constant.TRAIL_SL_1 * self.price):
+#                         self.stop_loss_price = max(
+#                             round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
+#                         )
+#                         self.price = self.stop_loss_price
+#                         logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
+#                         return (Signal.MODIFY, self.stop_loss_price, index_info)
 
-                    elif ltp >= (constant.TRAIL_SL_2 * self.price):
-                        self.stop_loss_price = max(
-                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
-                        )
-                        self.price = self.stop_loss_price
-                        logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+#                     elif ltp >= (constant.TRAIL_SL_2 * self.price):
+#                         self.stop_loss_price = max(
+#                             round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
+#                         )
+#                         self.price = self.stop_loss_price
+#                         logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
+#                         return (Signal.MODIFY, self.stop_loss_price, index_info)
 
-                    elif stoploss_condition_1 > self.stop_loss_price:
-                        self.stop_loss_price = stoploss_condition_1
-                        self.price = self.stop_loss_price
-                        logger.info(
-                            f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}"
-                        )
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+#                     elif stoploss_condition_1 > self.stop_loss_price:
+#                         self.stop_loss_price = stoploss_condition_1
+#                         self.price = self.stop_loss_price
+#                         logger.info(
+#                             f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}"
+#                         )
+#                         return (Signal.MODIFY, self.stop_loss_price, index_info)
 
-                    elif ltp <= self.stop_loss_price:
-                        self.trade_details["success"] = False
-                        self.trade_details["index"] = None
-                        self.trade_details["datetime"] = datetime.now()
+#                     elif ltp <= self.stop_loss_price:
+#                         self.trade_details["success"] = False
+#                         self.trade_details["index"] = None
+#                         self.trade_details["datetime"] = datetime.now()
 
-                        self.to_buy = False
-                        self.waiting_to_modify_or_sell = False
+#                         self.to_buy = False
+#                         self.waiting_to_modify_or_sell = False
 
-                        self.to_sell = True
-                        self.waiting_for_buy = True
-                        return (Signal.SELL, ltp, index_info)
-                    else:
-                        self.waiting_to_modify_or_sell = True
-                        return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
-                else:
-                    self.waiting_to_modify_or_sell = True
-                    return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
+#                         self.to_sell = True
+#                         self.waiting_for_buy = True
+#                         return (Signal.SELL, ltp, index_info)
+#                     else:
+#                         self.waiting_to_modify_or_sell = True
+#                         return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
+#                 else:
+#                     self.waiting_to_modify_or_sell = True
+#                     return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
 
-            elif self.waiting_to_modify_or_sell:
-                return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.price, index_info)
+#             elif self.waiting_to_modify_or_sell:
+#                 return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.price, index_info)
 
-            else:
-                self.waiting_for_buy = True
-                self.trade_details["success"] = False
-                return (Signal.WAITING_TO_BUY, self.price, index_info)
-        except Exception as exc:
-            logger.error(f"An error occurred while checking indicators: {exc}")
-            return (Signal.NULL, 0, [])
+#             else:
+#                 self.waiting_for_buy = True
+#                 self.trade_details["success"] = False
+#                 return (Signal.WAITING_TO_BUY, self.price, index_info)
+#         except Exception as exc:
+#             logger.error(f"An error occurred while checking indicators: {exc}")
+#             return (Signal.NULL, 0, [])
 
 
 # to access objects of dataframe and dict kind
@@ -636,6 +637,7 @@ class BaseStrategy:
         extra_args_amount: dict,
         current_profit: float,
         target_profit: float,
+        strategy_id: str
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -652,9 +654,11 @@ class BaseStrategy:
         self.lotsize: int
         self.trading_quantity: int
         self.buying_price: int
-        self.current_profit: int = current_profit
-        self.target_profit: int = target_profit
+        self.current_profit: float = current_profit
+        self.target_profit: float = target_profit
         self.token_id: str = ""
+        self.strategy_id: str = strategy_id
+
 
     # data = {
     #         token: str,
@@ -684,7 +688,8 @@ class BaseStrategy:
 
     async def fetch_candle_data(self):
         try:
-            #print(f"***************{self.instruments}********")
+            print(f"***************{self.instruments}******{len(self.instruments)}**")
+
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
@@ -704,22 +709,25 @@ class BaseStrategy:
         print("calling process data")
         try:
             for index, value in constant.INDEX_CANDLE_DATA:
-                #print("INDEX, value", index, value)
+                print("INDEX, value", index, value)
                 await asyncio.sleep(1)
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
+                
+                    
                     data = pd.DataFrame(value, columns=columns)
-                    #print(data)
-                    latest_candle = data.iloc[1]
-
-
+                    print(data)
+                    #latest_candle = data.iloc[1]
                     # Implement your comparison logic here
                     if self.current_profit >= self.target_profit:
                         break
-
+                    
+                    print(self.token_value[index])
                     signal, price_returned, index_info = await async_return(
-                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index])
+                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index], self.strategy_id)
                     )
+
+        
                     logger.info(
                         f"SIGNAL:{signal}, PRICE:{self.indicator.price}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
                     )
@@ -773,9 +781,9 @@ class BaseStrategy:
                             trade_time=current_time,
                             token_id=self.token_id,
                         )
-                        #print(f"#############{saved_trade}###############")
+                        # print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
-                       
+
                         # self.indicator.order_id, trade_book_full_response = await async_return(
                         #         self.data_provider.place_order(
                         #             index_info[0],
@@ -787,7 +795,7 @@ class BaseStrategy:
                         #         )
                         #     )
 
-                        #await place_order_mail(db)
+                        # await place_order_mail(db)
 
                         # uncomment to start actual trading
                         # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
@@ -797,7 +805,7 @@ class BaseStrategy:
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
-                        #await place_order_mail()
+                        # await place_order_mail()
 
                         for instrument in self.instruments:
                             if instrument.symbol == index:
@@ -923,6 +931,7 @@ async def start_strategy(strategy_params: StartStrategySchema):
             amount_index,
             current_profit,
             target_profit,
+            strategy_id,
         )
         task = asyncio.create_task(strategy.run(), name=strategy_id)
         # await save_strategy(strategy_params)
