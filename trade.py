@@ -41,7 +41,7 @@ ltp_data = ltp_smart.generateSession(
 
 def fetch_candle_data( ):
     to_date = datetime.now()
-    from_date = to_date - timedelta(minutes=360)
+    from_date = to_date - timedelta(minutes=240)
     from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
     to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
     historic_params = {
@@ -51,9 +51,9 @@ def fetch_candle_data( ):
         "fromdate": from_date_format,
         "todate": to_date_format,
     }
+    print(smart)
     res_json = smart.getCandleData(historic_params)
     data = res_json["data"][::-1]
-    print(data)
     print("Length ", len(data))
     return data
 
