@@ -45,7 +45,7 @@ class Constants:
         self.CLIENT_CODE = "J263557"
         self.PASSWORD = "7753"
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-        self.NFO_DATA_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
+        self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         self.OPT_TYPE = "OPTIDX"
         
         self.EXCH_TYPE = "NFO"
@@ -90,7 +90,7 @@ password = "7753"
 token_code = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
 
 # index details
-NFO_DATA_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
+NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 OPT_TYPE = "OPTIDX"
 EXCH_TYPE = "NFO"
 
