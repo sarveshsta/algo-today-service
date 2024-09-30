@@ -9,6 +9,7 @@ from json.decoder import JSONDecodeError
 from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
+
 # from .multiple_strategy import MultiIndexStrategy
 # from curd import save_trade
 import fastapi
@@ -702,7 +703,7 @@ class BaseStrategy:
                     self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
                 )
                 # candle_data = async_return(candle_data)
-
+                print("Candle data", candle_data)
                 if candle_data is None or len(candle_data)==0:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
