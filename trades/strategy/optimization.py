@@ -482,8 +482,8 @@ class MultiIndexStrategy(IndicatorInterface):
         ]  # a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token, ltp]
 
-        print("DATA in indicators,", data)
-        print("TOKEN, LTP, SYMBOL", passed_token, ltp)
+        #print("DATA in indicators,", data)
+        #print("TOKEN, LTP, SYMBOL", passed_token, ltp)
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
@@ -618,7 +618,6 @@ class MultiIndexStrategy(IndicatorInterface):
                 self.trade_details["success"] = False
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
         except Exception as exc:
-            print("")
             logger.error(f"An error occurred while checking indicators: {exc}")
             return (Signal.NULL, 0, [])
 
@@ -681,7 +680,7 @@ class BaseStrategy:
         try:
             #print(f"Instruments data ----> {type(self.instruments)}")
             for instrument in self.instruments:
-                print(f"Instruments data ----> {instrument.exch_seg} - {instrument.token} - {instrument.symbol}")
+                #print(f"Instruments data ----> {instrument.exch_seg} - {instrument.token} - {instrument.symbol}")
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 self.token_value[str(instrument.symbol)] = self.token
                 ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
@@ -696,7 +695,7 @@ class BaseStrategy:
     async def fetch_candle_data(self):
         try:
             for instrument in self.instruments:
-                print(f"Instruments data ----> {instrument}")
+                #print(f"Instruments data ----> {instrument}")
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
                 candle_data = await async_return(
@@ -708,9 +707,9 @@ class BaseStrategy:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
-                print(f"checking candle ======> {candle_data}")
+                #print(f"checking candle ======> {candle_data}")
                 INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
-                print(f"print candle data =====>{INDEX_CANDLE_DATA}")
+                #print(f"print candle data =====>{INDEX_CANDLE_DATA}")
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
@@ -855,9 +854,9 @@ class BaseStrategy:
                         # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
 
                 else:
-                    print("else value")
+                    #print("else value")
                     logger.info("Waiting for data...")
-            print("Ended for loop")
+           # print("Ended for loop")
         except Exception as e:
             logger.info(f"Error while calling process_data {str(e)}")
             raise
