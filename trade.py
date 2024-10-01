@@ -41,13 +41,13 @@ ltp_data = ltp_smart.generateSession(
 
 def fetch_candle_data( ):
     to_date = datetime.now()
-    from_date = to_date - timedelta(minutes=240)
+    from_date = to_date - timedelta(minutes=360)
     from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
     to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
     historic_params = {
         "exchange": "NFO",
-        "symboltoken": "57320",
-        "interval": "ONE_MINUTE",
+        "symboltoken": "55506",
+        "interval": "TEN_MINUTE",
         "fromdate": from_date_format,
         "todate": to_date_format,
     }
