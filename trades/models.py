@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, ForeignKey, Date
+from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
-from datetime import datetime
+
 from core.mixins import CoreBaseModel
 
 Base = declarative_base()
@@ -39,11 +39,12 @@ class TradeDetails(CoreBaseModel, Base):
     price = Column(Float, nullable=False)
     trade_time = Column(DateTime, default=datetime.now())
 
-        # ForeignKey relationship with the TokenModel
+    # ForeignKey relationship with the TokenModel
     token_id = Column(String, ForeignKey("tokens.token"), nullable=False)
-    
+
     # Define relationship with TokenModel for easy access to token data
     token = relationship("TokenModel", backref="trades")
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -70,7 +71,7 @@ class Order(Base):
 
     def calculate_total_value(self):
         return self.price * self.quantity
-    
+
 
 class StrategyValue(Base):
     __tablename__ = "strategy"
@@ -87,3 +88,24 @@ class StrategyValue(Base):
     indicator2 = Column(String)
     indicator3 = Column(String)
     indicator4 = Column(String)
+
+
+class TradingData(Base):
+    __tablename__ = "tradingdata"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    trace_candle = Column(Integer)
+    close = Column(String)
+    high = Column(String)
+    low = Column(String)
+    open = Column(String)
+    buying_multiplier = Column(Float)
+    stop_loss_multiplier = Column(Float)
+    sl_low_multiplier_1 = Column(Float)
+    sl_low_multiplier_2 = Column(Float)
+    trail_sl_1 = Column(Float)
+    trail_sl_2 = Column(Float)
+    modify_stop_loss_1 = Column(Float)
+    modify_stop_loss_2 = Column(Float)
+

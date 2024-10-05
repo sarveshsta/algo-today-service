@@ -37,7 +37,7 @@ load_dotenv()
 
 db = None
 
-INDEX_CANDLE_DATA = []
+INDEX_CANDLE_DATA = {}
 
 class Constants:
     def __init__(self):
@@ -250,6 +250,12 @@ class SmartApiDataProvider(DataProviderInterface):
             "fromdate": from_date_format,
             "todate": to_date_format,
         }
+
+
+
+
+
+
         res_json = self.__smart.getCandleData(historic_params)
         data = res_json["data"][::-1]
         # return data[:15]
@@ -696,7 +702,11 @@ class BaseStrategy:
     async def fetch_candle_data(self):
         try:
             for instrument in self.instruments:
-                #print(f"Instruments data ----> {instrument}")
+                print(f"Instruments data ----> {instrument}")
+                for inst in instrument:
+                    print(f"printing data of instruments==> {inst}")
+                
+                
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
                 candle_data = await async_return(
@@ -708,24 +718,22 @@ class BaseStrategy:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
-                #print(f"checking candle ======> {candle_data}")
-                INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
-                #print(f"print candle data =====>{INDEX_CANDLE_DATA}")
+                # print(f"checking candle ======> {candle_data}")
+                INDEX_CANDLE_DATA.append({str(instrument.symbol): candle_data})
+                print(f"print candle data =====>{INDEX_CANDLE_DATA}")
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
         print("calling process data")
         try:
-            # print("PRint index candle data", INDEX_CANDLE_DATA)
+
             for index, value in INDEX_CANDLE_DATA:
                 # print("INDEX VALUE", index, value)
                 await asyncio.sleep(1)
 
                 if (value and self.index_ltp_values[index]) is not None:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
-                
-                    
                     data = pd.DataFrame(value, columns=columns)
                     #latest_candle = data.iloc[1]
                     # Implement your comparison logic here

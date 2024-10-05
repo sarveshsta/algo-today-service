@@ -4,10 +4,20 @@ import fastapi
 from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
-from trades.models import TradeDetails
+
 from config.database.config import get_db
 from trades.managers import *
-from trades.schema import ExpirySchema, TokenSchema, Order, TradeDetailsSchema, TradeDetailSchema
+from trades.models import TradeDetails, TradingData
+from trades.schema import (
+    ExpirySchema,
+    Order,
+    TokenSchema,
+    TradeDetailSchema,
+    TradeDetailsSchema,
+    TradingDataCreate,
+    TradingDataResponse,
+    TradingDataUpdate,
+)
 
 router = fastapi.APIRouter()
 
@@ -72,3 +82,26 @@ async def get_fetch_previous_orders(db: Session = Depends(get_db)):
 @router.get('/trades/')
 def get_trade_details(db: Session = Depends(get_db)):
     return JSONResponse({"success":True})
+
+
+@router.post("/tradingdata/", response_model=TradingDataResponse)
+def create_trading_data(trading_data: TradingDataCreate, db: Session = Depends(get_db)):
+    db_trading_data = TradingData(**trading_data.dict())
+    db.add(db_trading_data)
+    db.commit()
+    db.refresh(db_trading_data)
+    return db_trading_data
+
+# PUT Endpoint to update trading data
+@router.put("/tradingdata/{data_id}", response_model=TradingDataResponse)
+def update_trading_data(data_id: int, trading_data: TradingDataUpdate, db: Session = Depends(get_db)):
+    db_trading_data = db.query(TradingData).filter(TradingData.id == data_id).first()
+    if not db_trading_data:
+        raise HTTPException(status_code=404, detail="Trading Data not found")
+
+    for key, value in trading_data.dict(exclude_unset=True).items():
+        setattr(db_trading_data, key, value)
+
+    db.commit()
+    db.refresh(db_trading_data)
+    return db_trading_data
