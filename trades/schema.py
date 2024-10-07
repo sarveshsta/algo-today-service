@@ -25,6 +25,18 @@ class TradingDataCreate(BaseModel):
 class TradingDataUpdate(TradingDataCreate):
     pass  # Same fields as TradingDataCreate
 
+class StrategyDetailsSchema(BaseModel):
+    user_id : str
+    strategy_name : str
+    index : str
+    strike_price : float
+    expiry : str
+    option : str
+    chart_time : str
+    indicator1 :str
+    indicator2 : str
+    indicator3 : str
+    indicator4 : str
 
 class TradingDataResponse(BaseModel):
     id: int

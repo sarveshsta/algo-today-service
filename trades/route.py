@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from config.database.config import get_db
 from trades.managers import *
-from trades.models import TradeDetails, TradingData
+from trades.models import TradeDetails, TradingData, StrategyValue
 from trades.schema import (
     ExpirySchema,
     Order,
@@ -17,6 +17,7 @@ from trades.schema import (
     TradingDataCreate,
     TradingDataResponse,
     TradingDataUpdate,
+    StrategyDetailsSchema
 )
 
 router = fastapi.APIRouter()
@@ -65,7 +66,13 @@ async def get_index_strike_price(index:str, expiry: str,  db: Session = Depends(
     if not response:  return JSONResponse({"success": False, "data":response}, status_code=404)
     return JSONResponse({"success": True, "data":response}, status_code=200)
 
-
+@router.get("/strategies/", response_model=List[StrategyDetailsSchema])
+def get_all_strategies(db: Session = Depends(get_db)):
+    strategies = db.query(StrategyValue).all()
+    print(strategies)
+    if not strategies:
+        raise HTTPException(status_code=404, detail="No strategies found")
+    return strategies
 # @router.get('/order/{order}', response_model=List[Order])
 # async def get_fetch_previous_order(order_id:int, db: Session = Depends(get_db)):
 #     response = fetch_previous_orders(order_id, db)

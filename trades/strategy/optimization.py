@@ -37,7 +37,7 @@ load_dotenv()
 
 db = None
 
-INDEX_CANDLE_DATA = {}
+INDEX_CANDLE_DATA = []
 
 class Constants:
     def __init__(self):
@@ -251,14 +251,8 @@ class SmartApiDataProvider(DataProviderInterface):
             "todate": to_date_format,
         }
 
-
-
-
-
-
         res_json = self.__smart.getCandleData(historic_params)
         data = res_json["data"][::-1]
-        # return data[:15]
         return data
 
     def fetch_ltp_data(self, token):
@@ -489,8 +483,6 @@ class MultiIndexStrategy(IndicatorInterface):
         ]  # a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token, ltp]
 
-        #print("DATA in indicators,", data)
-        #print("TOKEN, LTP, SYMBOL", passed_token, ltp)
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
@@ -685,9 +677,7 @@ class BaseStrategy:
 
     async def fetch_ltp_data(self):
         try:
-            #print(f"Instruments data ----> {type(self.instruments)}")
             for instrument in self.instruments:
-                #print(f"Instruments data ----> {instrument.exch_seg} - {instrument.token} - {instrument.symbol}")
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 self.token_value[str(instrument.symbol)] = self.token
                 ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
@@ -702,49 +692,39 @@ class BaseStrategy:
     async def fetch_candle_data(self):
         try:
             for instrument in self.instruments:
-                print(f"Instruments data ----> {instrument}")
-                for inst in instrument:
-                    print(f"printing data of instruments==> {inst}")
-                
-                
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
                 candle_data = await async_return(
                     self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
                 )
                 # candle_data = async_return(candle_data)
-                print("Candle data", candle_data)
                 if candle_data is None or len(candle_data)==0:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
                 # print(f"checking candle ======> {candle_data}")
-                INDEX_CANDLE_DATA.append({str(instrument.symbol): candle_data})
-                print(f"print candle data =====>{INDEX_CANDLE_DATA}")
+                INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
         except logging.exception:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        print("calling process data")
+        print(f"calling process data")
         try:
-
             for index, value in INDEX_CANDLE_DATA:
-                # print("INDEX VALUE", index, value)
                 await asyncio.sleep(1)
 
-                if (value and self.index_ltp_values[index]) is not None:
+                print("sel.index_ltp_values", self.index_ltp_values)
+                if value and self.index_ltp_values[index]:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(value, columns=columns)
-                    #latest_candle = data.iloc[1]
+                    latest_candle = data.iloc[1]
                     # Implement your comparison logic here
                     if self.current_profit >= self.target_profit:
                         break
                     
-                    print("Receive signals")
                     signal, price_returned, index_info = await async_return(
                         self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index], self.strategy_id)
                     )
-                    print("Successfully received signals")
         
                     logger.info(
                         f"SIGNAL:{signal}, PRICE:{self.indicator.price}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
@@ -863,9 +843,7 @@ class BaseStrategy:
                         # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
 
                 else:
-                    #print("else value")
                     logger.info("Waiting for data...")
-           # print("Ended for loop")
         except Exception as e:
             logger.info(f"Error while calling process_data {str(e)}")
             raise
