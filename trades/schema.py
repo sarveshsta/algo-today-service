@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 # Pydantic schema for request and response
 class TradingDataCreate(BaseModel):
-    user_id: str
     trace_candle: Optional[int] = None
     close: Optional[str] = None
     high: Optional[str] = None
@@ -40,7 +39,6 @@ class StrategyDetailsSchema(BaseModel):
 
 class TradingDataResponse(BaseModel):
     id: int
-    user_id: str
     trace_candle: Optional[int]
     close: Optional[str]
     high: Optional[str]

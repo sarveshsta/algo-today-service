@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
-from trades.models import TokenModel, Order
+from trades.models import Order, TokenModel, TradingData
 
 
 def get_tokens(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
@@ -53,30 +53,58 @@ def retrieve_strike_price(index: str, expiry: str, db: Session = Depends(get_db)
     indexes = db.query(TokenModel).filter(TokenModel.name == index, TokenModel.expiry_date == expiry).all()
     print(indexes)
     if indexes:
-        response_list = [{"name": ind.name, "symbol": ind.symbol, "expiry": str(ind.expiry_date), "strike_price": ind.strike} for ind in indexes]
+        response_list = [
+            {"name": ind.name, "symbol": ind.symbol, "expiry": str(ind.expiry_date), "strike_price": ind.strike}
+            for ind in indexes
+        ]
         # print(response_list)
         return response_list
     return None
-    
-    
+
+
 def fetch_previous_orders(db: Session = Depends(get_db)):
     orders = db.query(Order).all()
     print(orders)
     if orders:
-        response_list = [{
-            "order_id": order.order_id,
-            "unique_order_id": order.unique_order_id,
-            "token": order.token,
-            "signal": order.signal,
-            "price": order.price,
-            "status": order.status,
-            "quantity": order.quantity,
-            "ordertype": order.ordertype,
-            "producttype": order.producttype,
-            "duration": order.duration,
-            "stoploss": order.stoploss,
-            "transactiontime": order.transactiontime
-        }
-            for order in orders]
+        response_list = [
+            {
+                "order_id": order.order_id,
+                "unique_order_id": order.unique_order_id,
+                "token": order.token,
+                "signal": order.signal,
+                "price": order.price,
+                "status": order.status,
+                "quantity": order.quantity,
+                "ordertype": order.ordertype,
+                "producttype": order.producttype,
+                "duration": order.duration,
+                "stoploss": order.stoploss,
+                "transactiontime": order.transactiontime,
+            }
+            for order in orders
+        ]
         return response_list
     return None
+
+
+# def get_consts_data(db:Session = Depends(get_db)):
+#     orders = db.query(TradingData).all()
+#     if orders:
+#         response_list = [{
+#             "trace_candle": tradingdata.trace_candle,
+#             "close": TradingData,
+#             "high": "string",
+#             "low": "string",
+#             "open": "string",
+#             "buying_multiplier": 0,
+#             "stop_loss_multiplier": 0,
+#             "sl_low_multiplier_1": 0,
+#             "sl_low_multiplier_2": 0,
+#             "trail_sl_1": 0,
+#             "trail_sl_2": 0,
+#             "modify_stop_loss_1": 0,
+#             "modify_stop_loss_2": 0
+#          }
+#             for order in orders]
+#         return response_list
+#     return None

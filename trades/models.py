@@ -94,7 +94,6 @@ class TradingData(Base):
     __tablename__ = "tradingdata"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, index=True)
     trace_candle = Column(Integer)
     close = Column(String)
     high = Column(String)
@@ -108,4 +107,5 @@ class TradingData(Base):
     trail_sl_2 = Column(Float)
     modify_stop_loss_1 = Column(Float)
     modify_stop_loss_2 = Column(Float)
+
 

@@ -2,7 +2,9 @@ import yfinance as yf
 import time
 import json
 import os
-
+# NFO_DATA_URL="https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
+# REDIS_HOST="redis-13189.c264.ap-south-1-1.ec2.redns.redis-cloud.com"
+# REDIS_PORT="13189"
 # File to store the JSON data
 json_file = 'nifty_fin_service_data_new.json'
 

@@ -482,7 +482,6 @@ class MultiIndexStrategy(IndicatorInterface):
             1
         ]  # a five digit integer number to represent the actual token number for the symbol
         index_info = [token, symbol_token, ltp]
-
         try:
             # checking for pre buying condition
             if self.waiting_for_buy == True:
@@ -712,14 +711,16 @@ class BaseStrategy:
         try:
             for index, value in INDEX_CANDLE_DATA:
                 await asyncio.sleep(1)
-
-                print("sel.index_ltp_values", self.index_ltp_values)
+                print("Inside try")
                 if value and self.index_ltp_values[index]:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
                     data = pd.DataFrame(value, columns=columns)
                     latest_candle = data.iloc[1]
+                    print("latest candle", latest_candle)
                     # Implement your comparison logic here
+                    print("Current profit", self.current_profit, self.target_profit)
                     if self.current_profit >= self.target_profit:
+                        print("BREAKING HERE")
                         break
                     
                     signal, price_returned, index_info = await async_return(
@@ -887,7 +888,7 @@ class BaseStrategy:
 async def start_strategy(strategy_params: StartStrategySchema):
     try:
         print("STRATEGY PARAMS", strategy_params)
-        current_profit = 0.0
+        current_profit = -1
         target_profit = strategy_params.target_profit
         strategy_id = strategy_params.strategy_id
         index_and_candle_durations = {}
