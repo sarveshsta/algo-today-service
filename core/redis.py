@@ -1,5 +1,5 @@
-import aioredis
-
+# import aioredis
+import redis.asyncio as aioredis
 
 class PubSubClient:
     client = None
