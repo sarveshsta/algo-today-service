@@ -8,7 +8,7 @@ class PubSubClient:
     def create_connection(self, host, port, password):
         try:
             self.client = aioredis.Redis.from_url(
-                f"redis://{host}:{port}/", encoding="utf-8", decode_responses=True, password=password
+                f"redis://{host}:{port}/", encoding="utf-8", decode_responses=True, password=password, ssl=False
             )
             return self.client
         except Exception as e:
