@@ -4,9 +4,16 @@ from sqlalchemy.orm import sessionmaker
 
 from config.constants import DATABASE_URI
 
-SQLALCHEMY_DATABASE_URL = DATABASE_URI
+#SQLALCHEMY_DATABASE_URL = DATABASE_URI
+from sqlalchemy import create_engine
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={}, future=True)
+# Replace the placeholders with your database information
+DATABASE_URI = "postgresql://postgres:vipul8318@localhost:5432/algotoday"
+
+# Create the engine
+engine = create_engine(DATABASE_URI)
+
+#engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={}, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
 
 Base = declarative_base()

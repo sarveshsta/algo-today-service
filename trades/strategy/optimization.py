@@ -9,13 +9,16 @@ from json.decoder import JSONDecodeError
 from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
+import requests, pyotp
+from SmartApi import SmartConnect
+import socket
+from getmac import get_mac_address
 
 # from .multiple_strategy import MultiIndexStrategy
 # from curd import save_trade
 import fastapi
 import pandas as pd
 import pyotp
-import requests
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from SmartApi import SmartConnect
@@ -38,6 +41,39 @@ load_dotenv()
 db = None
 
 INDEX_CANDLE_DATA = []
+
+import requests, pyotp
+from SmartApi import SmartConnect
+API_KEY = "T4MHVpXH"
+CLIENT_CODE = "J263557"
+PASSWORD = "7753"
+TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+
+LTP_API_KEY = "MolOSZTR"
+LTP_CLIENT_CODE = "S55329579"
+LTP_PASSWORD = "4242"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+
+base_url = "https://apiconnect.angelbroking.com"
+# smart = SmartConnect(api_key=API_KEY)
+# data = smart.generateSession(
+#     clientCode=CLIENT_CODE,
+#     password=PASSWORD,
+#     totp=pyotp.TOTP(TOKEN_CODE).now()
+# )
+# print(data)
+
+def get_jwt_token(api_key, client_code, password, token_code):
+    smart = SmartConnect(api_key=api_key)
+    data = smart.generateSession(
+        clientCode=client_code,
+        password=password,
+        totp=pyotp.TOTP(token_code).now()
+    )
+
+    # Decode the response to JSON
+    jwt_token = data.get('data', {}).get('jwtToken', None)
+    return jwt_token
 
 class Constants:
     def __init__(self):
@@ -238,26 +274,142 @@ class SmartApiDataProvider(DataProviderInterface):
         self.__smart = smart
         self.__ltpSmart = ltpSmart
 
-    def fetch_candle_data(self, token, interval):
-        to_date = datetime.now()
-        from_date = to_date - timedelta(minutes=480)
-        from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
-        to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
-        historic_params = {
-            "exchange": token.exch_seg,
-            "symboltoken": token.token_id,
-            "interval": interval,
-            "fromdate": from_date_format,
-            "todate": to_date_format,
-        }
+    # def fetch_candle_data(self, token, interval):
+    #     to_date = datetime.now()
+    #     from_date = to_date - timedelta(minutes=480)
+    #     from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
+    #     to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
+    #     historic_params = {
+    #         "exchange": token.exch_seg,
+    #         "symboltoken": token.token_id,
+    #         "interval": interval,
+    #         "fromdate": from_date_format,
+    #         "todate": to_date_format,
+    #     }
 
-        res_json = self.__smart.getCandleData(historic_params)
-        data = res_json["data"][::-1]
-        return data
+    #     res_json = self.__smart.getCandleData(historic_params)
+    #     data = res_json["data"][::-1]
+    #     return data
+    def fetch_candle_data(self, token, interval):
+        """
+        Simplified function to fetch Candle Data, generating local IP, public IP, and MAC address dynamically.
+        """
+        api_key = os.getenv("API_KEY")
+        client_code = os.getenv("CLIENT_CODE")
+        password = os.getenv("PASSWORD")
+        token_code = os.getenv("TOKEN_CODE")
+
+
+        try:
+
+            auth_token=get_jwt_token(api_key,client_code,password,token_code)
+            local_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
+            mac_address = get_mac_address() #MAC address
+            to_date = datetime.now()
+
+            from_date = to_date - timedelta(minutes=2000)
+            from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
+            to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
+
+
+            # from_date_format = "2024-11-10 09:00"
+            # to_date_format = "2024-11-13 09:16"
+
+
+
+            # Fetch public IP address
+            public_ip_response = requests.get("https://api.ipify.org?format=json")
+            public_ip_response.raise_for_status()
+            public_ip = public_ip_response.json().get("ip")
+
+            # Construct payload and headers
+            payload = {
+                "exchange": token.exch_seg,
+                "symboltoken": token.token_id,
+                "interval": interval,
+                "fromdate": from_date_format,
+                "todate": to_date_format
+            }
+            headers = {
+                "X-PrivateKey": api_key,
+                "Accept": "application/json",
+                "X-SourceID": "WEB",
+                "X-ClientLocalIP": local_ip,
+                "X-ClientPublicIP": public_ip,
+                "X-MACAddress": mac_address,
+                "X-UserType": "USER",
+                "Authorization": auth_token,
+                "Content-Type": "application/json"
+            }
+
+            # Make API request
+            response = requests.post(
+                "https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData",
+                json=payload,
+                headers=headers
+            )
+
+            # Check response status
+            print(response.json)
+            response.raise_for_status()
+            return response.json()
+
+        except Exception as e:
+            raise Exception(f"Error fetching candle data: {str(e)}")
+
+    
+    # def fetch_ltp_data(self, token):
+    #     ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
+    #     return ltp_data
 
     def fetch_ltp_data(self, token):
-        ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
-        return ltp_data
+        """
+        Fetches LTP data from AngelOne API.
+        """
+        try:
+            api_key = os.getenv("API_KEY")
+            auth_token=get_jwt_token(api_key,client_code,password,token_code)
+            local_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
+            mac_address = get_mac_address() #MAC address
+
+            public_ip_response = requests.get("https://api.ipify.org?format=json")
+            public_ip_response.raise_for_status()
+            public_ip = public_ip_response.json().get("ip")
+
+
+            exchange_tokens={"NFO": [token.token_id]}
+            # Construct payload
+            payload = {
+                "mode": 'FULL',
+                "exchangeTokens": exchange_tokens
+            }
+
+            # Get headers
+            headers = {
+                "X-PrivateKey": api_key,
+                "Accept": "application/json",
+                "X-SourceID": "WEB",
+                "X-ClientLocalIP": local_ip,
+                "X-ClientPublicIP": public_ip,
+                "X-MACAddress": mac_address,
+                "X-UserType": "USER",
+                "Authorization": auth_token,
+                "Content-Type": "application/json"
+            }
+            # Make API request
+            response = requests.post(
+                "https://apiconnect.angelone.in/rest/secure/angelbroking/market/v1/quote/",
+                json=payload,
+                headers=headers
+            )
+
+            # Return the JSON response from the API
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error: {str(e)}")
+            return None
+
 
     def get_trade_book(self, order_id):
         sleep(2)

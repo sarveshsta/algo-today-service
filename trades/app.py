@@ -5,7 +5,7 @@ import pandas as pd
 import requests
 from SmartApi import SmartConnect
 
-from trades.tokens import Token
+from tokens import Token
 
 
 class SmartAPIException(Exception):
