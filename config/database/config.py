@@ -6,9 +6,10 @@ from config.constants import DATABASE_URI
 
 #SQLALCHEMY_DATABASE_URL = DATABASE_URI
 from sqlalchemy import create_engine
+import os
 
 # Replace the placeholders with your database information
-DATABASE_URI = "postgresql://postgres:vipul8318@localhost:5432/algotoday"
+DATABASE_URI = os.getenv("DATABASE_URI")
 
 # Create the engine
 engine = create_engine(DATABASE_URI)

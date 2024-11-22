@@ -350,9 +350,9 @@ class SmartApiDataProvider(DataProviderInterface):
             )
 
             # Check response status
-            print(response.json)
+            # print("CANDLE DATA response", response.json())
             response.raise_for_status()
-            return response.json()
+            return response.json()['data'][::-1]
 
         except Exception as e:
             raise Exception(f"Error fetching candle data: {str(e)}")
@@ -402,9 +402,9 @@ class SmartApiDataProvider(DataProviderInterface):
                 json=payload,
                 headers=headers
             )
-
-            # Return the JSON response from the API
-            return response.json()
+            # print("LTP RESPONSE", response.json())
+            ltp_data = response.json()["data"]["fetched"][0]['ltp']
+            return ltp_data
 
         except requests.exceptions.RequestException as e:
             print(f"Error: {str(e)}")
@@ -832,10 +832,11 @@ class BaseStrategy:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 self.token_value[str(instrument.symbol)] = self.token
                 ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
-                if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
-                    logger.error("No 'ltp' key in the LTP response JSON")
-                    continue  # Continue to the next instrument
-                self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
+                # if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
+                #     logger.error("No 'ltp' key in the LTP response JSON")
+                #     continue  # Continue to the next instrument
+                # self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
+                self.index_ltp_values[str(instrument.symbol)] = float(ltp_data)
                 # logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
