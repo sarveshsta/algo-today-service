@@ -2,14 +2,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from config.constants import DATABASE_URI
-
+# from config.constants import DATABASE_URI
+from decouple import config
 #SQLALCHEMY_DATABASE_URL = DATABASE_URI
 from sqlalchemy import create_engine
 import os
 
 # Replace the placeholders with your database information
-DATABASE_URI = os.getenv("DATABASE_URI")
+DATABASE_URI = config("DATABASE_URI")
 
 # Create the engine
 engine = create_engine(DATABASE_URI)
