@@ -44,6 +44,7 @@ INDEX_CANDLE_DATA = []
 
 import requests, pyotp
 from SmartApi import SmartConnect
+
 API_KEY = "T4MHVpXH"
 CLIENT_CODE = "J263557"
 PASSWORD = "7753"
@@ -60,20 +61,18 @@ base_url = "https://apiconnect.angelbroking.com"
 #     clientCode=CLIENT_CODE,
 #     password=PASSWORD,
 #     totp=pyotp.TOTP(TOKEN_CODE).now()
-# )
-# print(data)
+# )
+# print(data)
+
 
 def get_jwt_token(api_key, client_code, password, token_code):
     smart = SmartConnect(api_key=api_key)
-    data = smart.generateSession(
-        clientCode=client_code,
-        password=password,
-        totp=pyotp.TOTP(token_code).now()
-    )
+    data = smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
 
     # Decode the response to JSON
-    jwt_token = data.get('data', {}).get('jwtToken', None)
+    jwt_token = data.get("data", {}).get("jwtToken", None)
     return jwt_token
+
 
 class Constants:
     def __init__(self):
@@ -83,7 +82,7 @@ class Constants:
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
         self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         self.OPT_TYPE = "OPTIDX"
-        
+
         self.EXCH_TYPE = "NFO"
         self.LTP_API_KEY = "MolOSZTR"
         self.LTP_CLIENT_CODE = "S55329579"
@@ -299,23 +298,19 @@ class SmartApiDataProvider(DataProviderInterface):
         password = os.getenv("PASSWORD")
         token_code = os.getenv("TOKEN_CODE")
 
-
         try:
 
-            auth_token=get_jwt_token(api_key,client_code,password,token_code)
+            auth_token = get_jwt_token(api_key, client_code, password, token_code)
             local_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
-            mac_address = get_mac_address() #MAC address
+            mac_address = get_mac_address()  # MAC address
             to_date = datetime.now()
 
             from_date = to_date - timedelta(minutes=2000)
             from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
             to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
 
-
             # from_date_format = "2024-11-10 09:00"
             # to_date_format = "2024-11-13 09:16"
-
-
 
             # Fetch public IP address
             public_ip_response = requests.get("https://api.ipify.org?format=json")
@@ -328,7 +323,7 @@ class SmartApiDataProvider(DataProviderInterface):
                 "symboltoken": token.token_id,
                 "interval": interval,
                 "fromdate": from_date_format,
-                "todate": to_date_format
+                "todate": to_date_format,
             }
             headers = {
                 "X-PrivateKey": api_key,
@@ -339,50 +334,45 @@ class SmartApiDataProvider(DataProviderInterface):
                 "X-MACAddress": mac_address,
                 "X-UserType": "USER",
                 "Authorization": auth_token,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
             # Make API request
             response = requests.post(
                 "https://apiconnect.angelone.in/rest/secure/angelbroking/historical/v1/getCandleData",
                 json=payload,
-                headers=headers
+                headers=headers,
             )
 
             # Check response status
             # print("CANDLE DATA response", response.json())
             response.raise_for_status()
-            return response.json()['data'][::-1]
+            return response.json()["data"][::-1]
 
         except Exception as e:
             raise Exception(f"Error fetching candle data: {str(e)}")
 
-    
     # def fetch_ltp_data(self, token):
     #     ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
     #     return ltp_data
 
     def fetch_ltp_data(self, token):
         """
-        Fetches LTP data from AngelOne API.
+        Fetches LTP data from Ange  lOne API.
         """
         try:
             api_key = os.getenv("API_KEY")
-            auth_token=get_jwt_token(api_key,client_code,password,token_code)
+            auth_token = get_jwt_token(api_key, client_code, password, token_code)
             local_ip = socket.gethostbyname(socket.gethostname())  # Get local IP address
-            mac_address = get_mac_address() #MAC address
+            mac_address = get_mac_address()  # MAC address
 
             public_ip_response = requests.get("https://api.ipify.org?format=json")
             public_ip_response.raise_for_status()
             public_ip = public_ip_response.json().get("ip")
 
-
-            exchange_tokens={"NFO": [token.token_id]}
+            exchange_tokens = {"NFO": [token.token_id]}
             # Construct payload
-            payload = {
-                "mode": 'FULL',
-                "exchangeTokens": exchange_tokens
-            }
+            payload = {"mode": "FULL", "exchangeTokens": exchange_tokens}
 
             # Get headers
             headers = {
@@ -394,22 +384,21 @@ class SmartApiDataProvider(DataProviderInterface):
                 "X-MACAddress": mac_address,
                 "X-UserType": "USER",
                 "Authorization": auth_token,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
             # Make API request
             response = requests.post(
                 "https://apiconnect.angelone.in/rest/secure/angelbroking/market/v1/quote/",
                 json=payload,
-                headers=headers
+                headers=headers,
             )
             # print("LTP RESPONSE", response.json())
-            ltp_data = response.json()["data"]["fetched"][0]['ltp']
+            ltp_data = response.json()["data"]["fetched"][0]["ltp"]
             return ltp_data
 
         except requests.exceptions.RequestException as e:
             print(f"Error: {str(e)}")
             return None
-
 
     def get_trade_book(self, order_id):
         sleep(2)
@@ -663,7 +652,7 @@ class MultiIndexStrategy(IndicatorInterface):
                         # No need to reassign current_candle and previous_candle here since it's already done above.
                         self.price = current_candle[constant.HIGH]
                         self.trading_price = current_candle[constant.HIGH]
-                        self.trade_details["index"] = token                    
+                        self.trade_details["index"] = token
                         break
 
             # buying conditions
@@ -790,7 +779,7 @@ class BaseStrategy:
         extra_args_amount: dict,
         current_profit: float,
         target_profit: float,
-        strategy_id: str
+        strategy_id: str,
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -811,8 +800,6 @@ class BaseStrategy:
         self.target_profit: float = target_profit
         self.token_id: str = ""
         self.strategy_id: str = strategy_id
-        
-        
 
     # data = {
     #         token: str,
@@ -850,7 +837,7 @@ class BaseStrategy:
                     self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
                 )
                 # candle_data = async_return(candle_data)
-                if candle_data is None or len(candle_data)==0:
+                if candle_data is None or len(candle_data) == 0:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
@@ -860,7 +847,7 @@ class BaseStrategy:
             logger.error(f"An error occurred while fetching candle data")
 
     async def process_data(self):
-        print(f"calling process data")
+        print(f"calling process data/ INDEX_CANDLE_DATA", INDEX_CANDLE_DATA)
         try:
             for index, value in INDEX_CANDLE_DATA:
                 await asyncio.sleep(1)
@@ -875,11 +862,13 @@ class BaseStrategy:
                     if self.current_profit >= self.target_profit:
                         print("BREAKING HERE")
                         break
-                    
+
                     signal, price_returned, index_info = await async_return(
-                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index], self.strategy_id)
+                        self.indicator.check_indicators(
+                            data, self.token_value[index], self.index_ltp_values[index], self.strategy_id
+                        )
                     )
-        
+
                     logger.info(
                         f"SIGNAL:{signal}, PRICE:{self.indicator.price}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
                     )
