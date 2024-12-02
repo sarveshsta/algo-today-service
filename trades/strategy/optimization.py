@@ -991,7 +991,7 @@ class BaseStrategy:
 
                         # self.indicator.price, self.indicator.stop_loss_price = 0, 0
                         # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
-
+  
                         # uncomment to start actual trading
                         self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
