@@ -900,11 +900,11 @@ class BaseStrategy:
 
                         initialize_db()
 
-                        self.indicator.price = self.indicator.price
-                        self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
-                        logger.info(
-                            f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
-                        )
+                        # self.indicator.price = self.indicator.price
+                        # self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
+                        # logger.info(
+                        #     f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                        # )
 
                         for instrument in self.instruments:
                             if instrument.symbol == index:
@@ -937,24 +937,24 @@ class BaseStrategy:
                         # print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
 
-                        # self.indicator.order_id, trade_book_full_response = await async_return(
-                        #         self.data_provider.place_order(
-                        #             index_info[0],
-                        #             index_info[1],
-                        #             "BUY",
-                        #             "MARKET",
-                        #             self.indicator.price,
-                        #             self.trading_quantity,
-                        #         )
-                        #     )
+                        self.indicator.order_id, trade_book_full_response = await async_return(
+                                self.data_provider.place_order(
+                                    index_info[0],
+                                    index_info[1],
+                                    "BUY",
+                                    "MARKET",
+                                    self.indicator.price,
+                                    self.trading_quantity,
+                                )
+                            )
 
-                        # await place_order_mail(db)
+                        await place_order_mail(db)
 
                         # uncomment to start actual trading
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        # self.indicator.price = float(trade_book_full_response['fillprice'])
-                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        # logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price = float(trade_book_full_response['fillprice'])
+                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
@@ -989,13 +989,13 @@ class BaseStrategy:
 
                         saved_trade = save_trade(new_trade)
 
-                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
 
                         # uncomment to start actual trading
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
-                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
+                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
 
                 else:
                     logger.info("Waiting for data...")
