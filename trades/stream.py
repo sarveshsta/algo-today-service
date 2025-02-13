@@ -4,13 +4,12 @@ import threading
 import pyotp
 from SmartApi import SmartConnect
 from SmartApi.smartWebSocketV2 import SmartWebSocketV2
-
 from core.events import SmartAPIEvent
 from core.redis import PubSubClient
 
 
 # client code to get LTP data
-LTP_API_KEY = "MolOSZTR"
+LTP_API_KEY = "loKKgWNr"
 LTP_CLIENT_CODE = "S55329579"
 LTP_PASSWORD = "4242"
 LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
@@ -29,9 +28,11 @@ class WSApp:
         self.token_listener = token_listener
         self.pubsub = pubsub
         smart = SmartConnect(api_key=self.api_key)
+        print("smart smart smart", api_key)
         data = smart.generateSession(
                 clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
             )
+        print("data data data data data data ", data)
         auth_token = data["data"]["jwtToken"]
         feed_token = smart.getfeedToken()
 

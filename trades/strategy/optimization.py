@@ -3,6 +3,7 @@ import copy
 import json
 import logging
 import os
+import socket
 from datetime import datetime, timedelta
 from enum import Enum
 from json.decoder import JSONDecodeError
@@ -14,11 +15,11 @@ from urllib.error import URLError
 # from curd import save_trade
 import fastapi
 import pandas as pd
-import pyotp
-import requests
 from dotenv import load_dotenv
 from fastapi import HTTPException
-from SmartApi import SmartConnect
+import pyotp
+import requests
+from SmartApi.smartConnect import SmartConnect
 
 from config.database.config import SessionLocal
 from trades.models import TradeDetails
@@ -29,27 +30,36 @@ router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
 
 load_dotenv()
-# api_key = os.getenv("API_KEY")
-# client_code = os.getenv("CLIENT_CODE")
-# password = os.getenv("PASSWORD")
-# token_code = os.getenv("TOKEN_CODE")
-
 
 db = None
 
 INDEX_CANDLE_DATA = []
 
+LTP_API_KEY = "ZlQnOy4h"
+LTP_CLIENT_CODE = "S55329579"
+LTP_PASSWORD = "4242"
+LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
+
+API_KEY = "8x8RGK2s"
+CLIENT_CODE = "J263557"
+PASSWORD = "7753"
+TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+
+base_url = "https://apiconnect.angelbroking.com"
+
+
 class Constants:
     def __init__(self):
-        self.API_KEY = "T4MHVpXH"
+        self.API_KEY = "8x8RGK2s"
         self.CLIENT_CODE = "J263557"
         self.PASSWORD = "7753"
         self.TOKEN_CODE = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
+
         self.NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         self.OPT_TYPE = "OPTIDX"
-        
+
         self.EXCH_TYPE = "NFO"
-        self.LTP_API_KEY = "MolOSZTR"
+        self.LTP_API_KEY = "ZlQnOy4h"
         self.LTP_CLIENT_CODE = "S55329579"
         self.LTP_PASSWORD = "4242"
         self.LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
@@ -77,34 +87,15 @@ constant = Constants()
 
 trade_data = {}
 
-# client code to get LTP data
-LTP_API_KEY = "MolOSZTR"
-LTP_CLIENT_CODE = "S55329579"
-LTP_PASSWORD = "4242"
-LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
-
-
-api_key = "T4MHVpXH"
-client_code = "J263557"
-password = "7753"
-token_code = "3MYXRWJIJ2CZT6Y5PD2EU5RNNQ"
-
 # index details
 NFO_DATA_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
 OPT_TYPE = "OPTIDX"
 EXCH_TYPE = "NFO"
 
-# client code to get LTP data
-LTP_API_KEY = "MolOSZTR"
-LTP_CLIENT_CODE = "S55329579"
-LTP_PASSWORD = "4242"
-LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
-
 # https://pypi.org/project/smartapi-python/
 # objects to get `@smart` candle data and `@ltp_smart`LTP data respectively
-smart = SmartConnect(api_key=api_key)
+smart = SmartConnect(api_key=API_KEY)
 ltp_smart = SmartConnect(api_key=LTP_API_KEY)
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -122,8 +113,6 @@ def write_logs(type, index, price, status, reason):
     # Open the file and append the log
     with open(log_file, "a+") as f:
         f.write(f"Trade {type} in {index} at {price} with {status}, reason {reason} at {datetime.now()} \n")
-
-    print("LOGS WRITTEN")
 
 
 class CandleDuration(Enum):
@@ -239,25 +228,36 @@ class SmartApiDataProvider(DataProviderInterface):
         self.__ltpSmart = ltpSmart
 
     def fetch_candle_data(self, token, interval):
-        to_date = datetime.now()
-        from_date = to_date - timedelta(minutes=480)
-        from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
-        to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
-        historic_params = {
-            "exchange": token.exch_seg,
-            "symboltoken": token.token_id,
-            "interval": interval,
-            "fromdate": from_date_format,
-            "todate": to_date_format,
-        }
+        try:
+            to_date = datetime.now()
+            from_date = to_date - timedelta(minutes=480)
+            from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
+            to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
+            historic_params = {
+                "exchange": token.exch_seg,
+                "symboltoken": token.token_id,
+                "interval": interval,
+                "fromdate": from_date_format,
+                "todate": to_date_format,
+            }
 
-        res_json = self.__smart.getCandleData(historic_params)
-        data = res_json["data"][::-1]
-        return data
+            res_json = self.__smart.getCandleData(historic_params)
+            data = res_json["data"][::-1]
+            return data
+        except Exception as e:
+            print("Candle data exception", e)
+            raise ValueError("Failed to fetch candle data")
+
+
 
     def fetch_ltp_data(self, token):
-        ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
-        return ltp_data
+        try:
+            ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
+            print("LTP DATA.....", ltp_data)
+            return ltp_data['data']['ltp']
+        except Exception as e:
+            print("LTP data exception", e)
+            raise ValueError("Failed to fetch LTP data")
 
     def get_trade_book(self, order_id):
         sleep(2)
@@ -511,7 +511,7 @@ class MultiIndexStrategy(IndicatorInterface):
                         # No need to reassign current_candle and previous_candle here since it's already done above.
                         self.price = current_candle[constant.HIGH]
                         self.trading_price = current_candle[constant.HIGH]
-                        self.trade_details["index"] = token                    
+                        self.trade_details["index"] = token
                         break
 
             # buying conditions
@@ -659,8 +659,6 @@ class BaseStrategy:
         self.target_profit: float = target_profit
         self.token_id: str = ""
         self.strategy_id: str = strategy_id
-        
-        
 
     # data = {
     #         token: str,
@@ -680,10 +678,11 @@ class BaseStrategy:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 self.token_value[str(instrument.symbol)] = self.token
                 ltp_data = await async_return(self.data_provider.fetch_ltp_data(self.token))
-                if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
-                    logger.error("No 'ltp' key in the LTP response JSON")
-                    continue  # Continue to the next instrument
-                self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
+                # if "data" not in ltp_data or "ltp" not in ltp_data["data"]:
+                #     logger.error("No 'ltp' key in the LTP response JSON")
+                #     continue  # Continue to the next instrument
+                # self.index_ltp_values[str(instrument.symbol)] = float(ltp_data["data"]["ltp"])
+                self.index_ltp_values[str(instrument.symbol)] = float(ltp_data)
                 # logger.info(f"self.index_ltp_values: {self.index_ltp_values}")
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
@@ -697,7 +696,7 @@ class BaseStrategy:
                     self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
                 )
                 # candle_data = async_return(candle_data)
-                if candle_data is None or len(candle_data)==0:
+                if candle_data is None or len(candle_data) == 0:
                     logger.error(f"No candle data returned for {instrument.symbol}")
                     continue  # Continue to the next instrument
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
@@ -722,11 +721,12 @@ class BaseStrategy:
                     if self.current_profit >= self.target_profit:
                         print("BREAKING HERE")
                         break
-                    
+
                     signal, price_returned, index_info = await async_return(
-                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index], self.strategy_id)
+                        self.indicator.check_indicators(data, self.token_value[index], self.index_ltp_values[index],
+                                                        self.strategy_id)
                     )
-        
+
                     logger.info(
                         f"SIGNAL:{signal}, PRICE:{self.indicator.price}, INDEX:{index_info[0]}, LTP:{index_info[-1]}"
                     )
@@ -746,11 +746,11 @@ class BaseStrategy:
 
                         initialize_db()
 
-                        self.indicator.price = self.indicator.price
-                        self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
-                        logger.info(
-                            f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
-                        )
+                        # self.indicator.price = self.indicator.price
+                        # self.indicator.stop_loss_price = self.indicator.price * constant.STOP_LOSS_MULTIPLIER
+                        # logger.info(
+                        #     f"Trade BOUGHT at {self.indicator.price} in {index_info[0]} with SL={self.indicator.stop_loss_price}"
+                        # )
 
                         for instrument in self.instruments:
                             if instrument.symbol == index:
@@ -783,24 +783,27 @@ class BaseStrategy:
                         # print(f"#############{saved_trade}###############")
                         saved_trade = save_trade(new_trade)
 
-                        # self.indicator.order_id, trade_book_full_response = await async_return(
-                        #         self.data_provider.place_order(
-                        #             index_info[0],
-                        #             index_info[1],
-                        #             "BUY",
-                        #             "MARKET",
-                        #             self.indicator.price,
-                        #             self.trading_quantity,
-                        #         )
-                        #     )
+                        self.indicator.order_id, trade_book_full_response = await async_return(
+                            self.data_provider.place_order(
+                                index_info[0],
+                                index_info[1],
+                                "BUY",
+                                "MARKET",
+                                self.indicator.price,
+                                self.trading_quantity,
+                            )
+                        )
 
-                        # await place_order_mail(db)
+                        await place_order_mail(db)
 
                         # uncomment to start actual trading
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET", price_returned, self.parameters[index]))
-                        # self.indicator.price = float(trade_book_full_response['fillprice'])
-                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
-                        # logger.info(f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(
+                            self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
+                                                           price_returned, self.parameters[index]))
+                        self.indicator.price = float(trade_book_full_response['fillprice'])
+                        self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        logger.info(
+                            f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
@@ -835,13 +838,15 @@ class BaseStrategy:
 
                         saved_trade = save_trade(new_trade)
 
-                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
+                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        # logger.info(f"TRADE SOLD at {price_returned} in {index_info[0]}")
 
                         # uncomment to start actual trading
-                        # self.indicator.order_id, trade_book_full_response = await async_return(self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET", price_returned, self.parameters[index]))
-                        # self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        # logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                        self.indicator.order_id, trade_book_full_response = await async_return(
+                            self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET",
+                                                           price_returned, self.parameters[index]))
+                        self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
 
                 else:
                     logger.info("Waiting for data...")
@@ -883,7 +888,71 @@ class BaseStrategy:
         self.stop_event.set()
 
 
-# Start strategy endpoint
+# # Start strategy endpoint
+# @router.post("/start_strategy")
+# async def start_strategy(strategy_params: StartStrategySchema):
+#     try:
+#         print("STRATEGY PARAMS", strategy_params)
+#         current_profit = -1
+#         target_profit = strategy_params.target_profit
+#         strategy_id = strategy_params.strategy_id
+#         index_and_candle_durations = {}
+#         quantity_index = {}
+#         amount_index = {}
+#         for index in strategy_params.index_list:
+#             index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = (
+#                 index.chart_time
+#             )
+#
+#         for index in strategy_params.index_list:
+#             quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
+#
+#         for index in strategy_params.index_list:
+#             amount_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.trading_amount
+#
+#         if strategy_params.strategy_id in tasks:
+#             raise HTTPException(status_code=400, detail="Strategy already running")
+#
+#         ltp_smart.generateSession(
+#             clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+#         )
+#
+#         try:
+#             smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+#         except Exception as e:
+#             return {"message": str(e), "success": True}
+#
+#         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
+#         print("instrument_reader", instrument_reader)
+#         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
+#         print("smart_api_provider", smart_api_provider)
+#         max_transactions_indicator = MultiIndexStrategy()
+#         strategy = BaseStrategy(
+#             instrument_reader,
+#             smart_api_provider,
+#             max_transactions_indicator,
+#             index_and_candle_durations,
+#             quantity_index,
+#             amount_index,
+#             current_profit,
+#             target_profit,
+#             strategy_id,
+#         )
+#         print("strategy strategy strategy strategy", strategy)
+#         task = asyncio.create_task(strategy.run(), name=strategy_id)
+#         # await save_strategy(strategy_params)
+#         tasks[strategy_id] = task
+#         response = {"message": "strategy starts", "success": True, "strategy_id": strategy_id}
+#         logger.info("Response", response)
+#         return response
+#     except Exception as exc:
+#         logger.info(f"Error in running strategy", exc)
+#         response = {
+#             "message": f"strategy failed to start, {exc}, ",
+#             "success": False,
+#         }
+#         return response
+
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
     try:
@@ -894,32 +963,29 @@ async def start_strategy(strategy_params: StartStrategySchema):
         index_and_candle_durations = {}
         quantity_index = {}
         amount_index = {}
-        for index in strategy_params.index_list:
-            index_and_candle_durations[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = (
-                index.chart_time
-            )
 
         for index in strategy_params.index_list:
-            quantity_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.quantity
+            key = f"{index.index}{index.expiry}{index.strike_price}{index.option}"
+            index_and_candle_durations[key] = index.chart_time
+            quantity_index[key] = index.quantity
+            amount_index[key] = index.trading_amount
 
-        for index in strategy_params.index_list:
-            amount_index[f"{index.index}{index.expiry}{index.strike_price}{index.option}"] = index.trading_amount
-
-        if strategy_params.strategy_id in tasks:
+        if strategy_id in tasks:
             raise HTTPException(status_code=400, detail="Strategy already running")
 
-        ltp_smart.generateSession(
-            clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-        )
 
         try:
-            smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(token_code).now())
+            smart.generateSession(clientCode=CLIENT_CODE, password=PASSWORD, totp=pyotp.TOTP(TOKEN_CODE).now())
+            ltp_smart.generateSession(
+                clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+            )
         except Exception as e:
             return {"message": str(e), "success": True}
 
         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
         max_transactions_indicator = MultiIndexStrategy()
+
         strategy = BaseStrategy(
             instrument_reader,
             smart_api_provider,
@@ -931,20 +997,38 @@ async def start_strategy(strategy_params: StartStrategySchema):
             target_profit,
             strategy_id,
         )
+
         task = asyncio.create_task(strategy.run(), name=strategy_id)
-        # await save_strategy(strategy_params)
         tasks[strategy_id] = task
+
         response = {"message": "strategy starts", "success": True, "strategy_id": strategy_id}
         logger.info("Response", response)
         return response
+
     except Exception as exc:
-        logger.info(f"Error in running strategy", exc)
+        logger.info("Error in running strategy", exc_info=True)
         response = {
-            "message": f"strategy failed to start, {exc}, ",
+            "message": f"Strategy failed to start: {exc}",
             "success": False,
         }
         return response
 
+
+# Stop strategy endpoint
+@router.get("/stop_strategy/{strategy_id}")
+async def stop_strategy(strategy_id):
+    try:
+        if strategy_id not in tasks:
+            raise HTTPException(status_code=400, detail="Strategy not found")
+        task_info = tasks[strategy_id]
+        task_info.cancel()
+        await task_info
+    except asyncio.CancelledError:
+        del tasks[strategy_id]
+        raise HTTPException(status_code=200, detail="Strategy Stop")
+
+    del tasks[strategy_id]
+    return {"message": "Strategy stopped", "success": True}
 
 # Stop strategy endpoint
 @router.get("/stop_strategy/{strategy_id}")
