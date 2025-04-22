@@ -108,8 +108,8 @@ class ExpirySchema(BaseModel):
 
 class IndexData(BaseModel):
     index: str
-    strike_price: int
-    expiry: str
+    strike_price: int | None
+    expiry: str | None
     option: str
     chart_time: str
     quantity: int | None

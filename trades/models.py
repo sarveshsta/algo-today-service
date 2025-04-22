@@ -27,7 +27,11 @@ class TokenModel(CoreBaseModel, Base):
 
     @expiry.setter
     def expiry(self, value) -> None:
-        self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
+        # self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
+        if value:  # checks for empty string or None
+            self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
+        else:
+            self.expiry_date = None
 
 
 class TradeDetails(CoreBaseModel, Base):
