@@ -11,7 +11,8 @@ from time import sleep
 from typing import Dict, List, Tuple
 from urllib.error import URLError
 import threading
-
+import pytz
+import time
 import fastapi
 import pandas as pd
 from dotenv import load_dotenv
@@ -236,7 +237,8 @@ class SmartApiDataProvider(DataProviderInterface):
 
     def fetch_candle_data(self, token, interval):
         try:
-            to_date = datetime.now()
+            ist = pytz.timezone('Asia/Kolkata')
+            to_date = datetime.now(ist)
             from_date = to_date - timedelta(minutes=480)
             from_date_format = from_date.strftime("%Y-%m-%d %H:%M")
             to_date_format = to_date.strftime("%Y-%m-%d %H:%M")
@@ -258,8 +260,6 @@ class SmartApiDataProvider(DataProviderInterface):
             raise ValueError("Failed to fetch candle data")
 
 
-
-
     def fetch_ltp_data(self, token):
         try:
             ltp_data = self.__ltpSmart.ltpData("NFO", token.symbol, token.token_id)
@@ -272,71 +272,68 @@ class SmartApiDataProvider(DataProviderInterface):
    
 
     def get_trade_book(self, order_id):
-        sleep(3) 
-        retry_count = 10 
+        max_retries = 3
+        delay = 2  # Initial delay in seconds
 
-        while retry_count > 0:
+        for attempt in range(1, max_retries + 1):
             try:
-                order_book = self.__smart.tradeBook()
-                
-                if not order_book or "data" not in order_book or not order_book["data"]:
-                    logger.warning(f"⚠ Trade book response is None or empty for order {order_id}. Retrying in 5 seconds...")
-                    retry_count -= 1
-                    sleep(5)  # Wait before retrying
-                    continue
+                logger.info(f"📦 Fetching trade book (Attempt {attempt}) for order ID: {order_id}")
+                trade_book = self.__smart.tradeBook()
 
-                for trade in order_book["data"]:
-                    if trade["orderid"] == order_id:
-                        logger.info(f"✅ Trade details found for order {order_id}: {trade}")
-                        return order_id, trade  
+                if not trade_book or "data" not in trade_book or not trade_book["data"]:
+                    logger.warning(f"⚠ Empty or invalid trade book response on attempt {attempt} for order ID: {order_id}")
+                else:
+                    for trade in trade_book["data"]:
+                        if trade.get("orderid") == order_id:
+                            logger.info(f"✅ Trade for order {order_id} found in trade book.")
+                            return order_id, trade
 
-                logger.warning(f"⚠ Order {order_id} not found in trade book. Retrying...")
-                retry_count -= 1
-                sleep(5)
+                    logger.warning(f"⚠ Order ID {order_id} not found in trade book on attempt {attempt}.")
 
             except Exception as e:
-                logger.error(f"❌ Error fetching trade book: {str(e)}")
-                retry_count -= 1
-                sleep(5)
+                logger.error(f"❌ Exception on fetching trade book attempt {attempt} for order {order_id}: {e}")
 
-        logger.error(f"❌ Trade book fetch failed after multiple attempts for order {order_id}. Checking order book instead.")
-        
-      
+            # Wait before retrying
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+
+        logger.error(f"❌ Failed to fetch trade info for {order_id} after {max_retries} attempts. Falling back to order book.")
         return self.get_order_book(order_id)
 
 
-    def get_order_book(self, order_id):
-        sleep(2) 
-        retry_count = 5 
 
-        while retry_count > 0:
+    def get_order_book(self, order_id):
+        max_retries = 3
+        delay = 2  # Initial delay in seconds
+
+        for attempt in range(1, max_retries + 1):
             try:
+                logger.info(f"📦 Fetching order book (Attempt {attempt}) for order ID: {order_id}")
                 order_book = self.__smart.orderBook()
-                
-                if not order_book or "data" not in order_book or order_book["data"] is None:
-                    logger.warning(f"⚠ Order book response is None or empty for order {order_id}. Retrying...")
-                    retry_count -= 1
-                    sleep(5)
-                    continue 
-                
-                for order in order_book["data"]:
-                    if order["orderid"] == order_id:
-                        return order_id, order
-                
-                logger.warning(f"⚠ Order {order_id} not found in order book. Retrying...")
-                retry_count -= 1
-                sleep(5)
+
+                if not order_book or "data" not in order_book or not order_book["data"]:
+                    logger.warning(f"⚠ Empty or invalid order book response on attempt {attempt} for order ID: {order_id}")
+                else:
+                    for order in order_book["data"]:
+                        if order.get("orderid") == order_id:
+                            logger.info(f"✅ Order {order_id} found in order book.")
+                            return order_id, order
+
+                    logger.warning(f"⚠ Order ID {order_id} not found in order book on attempt {attempt}.")
 
             except Exception as e:
-                logger.error(f"❌ Error fetching order book: {str(e)}")
-                retry_count -= 1
-                sleep(5)
+                logger.error(f"❌ Exception on fetching order book attempt {attempt} for order {order_id}: {e}")
 
-        logger.error(f"❌ Order book fetch failed after multiple attempts for order {order_id}")
-        return order_id, None  
+            # Wait before retrying
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+
+        logger.error(f"❌ Failed to fetch order info for {order_id} after {max_retries} attempts.")
+        return order_id, None
+
     def place_order(self, symbol, token, transaction, ordertype, price, quantity):
         if ordertype == "MARKET":
-            price = 700
+            price = 0
         try:
             orderparams = {
                 "variety": "NORMAL",
@@ -356,11 +353,21 @@ class SmartApiDataProvider(DataProviderInterface):
             order_id = self.__smart.placeOrder(orderparams)
             sleep(1)
             logger.info(f"PlaceOrder id : {order_id} ")
-            order_id, i = self.get_trade_book(order_id=order_id)
-            return order_id, i
+            # order_id, i = self.get_order_book(order_id=order_id)
+            order_id, order_details = self.get_order_book(order_id=order_id)
+            # return order_id, i
+            # return order_id
+            if order_details and order_details.get("status") == "rejected":
+                logger.error(f"Order {order_id} was rejected: {order_details.get('text', 'Unknown reason')}")
+                return order_id, {"status": "rejected", "fillprice": 0, "text": order_details.get("text", "Order rejected")}
+            
+            return order_id, order_details
         except Exception as e:
             logger.info(f"Order placement failed: {e}")
-            raise ValueError(f"Stop-loss placing failed, reason: {e}")
+            return None, {"status": "failed", "fillprice": 0, "text": str(e)}
+        # except Exception as e:
+        #     logger.info(f"Order placement failed: {e}")
+        #     raise ValueError(f"Stop-loss placing failed, reason: {e}")
 
     def sell_order(self, symbol, token, transaction, ordertype, price, quantity):
         if ordertype == "MARKET":
@@ -384,8 +391,9 @@ class SmartApiDataProvider(DataProviderInterface):
             order_id = self.__smart.placeOrder(orderparams)
             sleep(1)
             logger.info(f"Sell-order id : {order_id} ")
-            order_id, i = self.get_trade_book(order_id=order_id)
+            order_id, i = self.get_order_book(order_id=order_id)
             return order_id, i
+            # return order_id
         except Exception as e:
             logger.info(f"Order placement failed: {e}")
             raise ValueError(f"Stop-loss placing failed, reason: {e}")
@@ -506,6 +514,8 @@ def NumberOfStocksPurchased(data, total_amount):
 
     return quantity_purchase
 
+
+
 class MultiIndexStrategy(IndicatorInterface):
     def __init__(self):
         self.to_buy = False
@@ -521,149 +531,140 @@ class MultiIndexStrategy(IndicatorInterface):
         self.order_id = "000000000000"
         self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
+    # def __init__(self):
+    #     self.to_buy = True
+    #     self.to_modify = False
+    #     self.waiting_to_modify = True
+    #     self.waiting_for_buy = False
+    #     self.to_sell = False
+    #     self.waiting_to_sell = False
+    #     self.waiting_to_modify_or_sell = True
+    #     self.stop_loss_price = 0.0
+    #     self.price = 0.0
+    #     self.trading_price = 0
+    #     self.order_id = "000000000000"
+    #     self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    #     self.trade_details = {"success": True, "index": None, "datetime": datetime.now()}
 
-    # this is our main strategy function
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
-        ltp = ltp_value
+        ltp = ltp_value / 100
 
-        token = str(passed_token).split(":")[-1]  # this is actually symbol written as FINNIFTY23JUL2423500CE
-        symbol_token = str(passed_token).split(":")[
-            1
-        ]  # a five digit integer number to represent the actual token number for the symbol
+        token = str(passed_token).split(":")[-1]
+        symbol_token = str(passed_token).split(":")[1]
         index_info = [token, symbol_token, ltp]
-        try:
-            # checking for pre buying condition
-            if self.waiting_for_buy == True:
 
-                current_candle = data.iloc[1]  # latest candle formed
-                previous_candle = data.iloc[2]  # last second candle formed
-                print("PREVIOUS?CURRENT", previous_candle, current_candle)
+        logger.info(f"\n--- Checking indicators for token: {token} | LTP: {ltp} ---")
+
+        try:
+            if self.waiting_for_buy:
+                logger.info("Status: WAITING FOR BUY")
 
                 for i in range(1, constant.TRACE_CANDLE + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
 
+                    logger.info(f"Checking Candle Pair i={i}:")
+                    logger.info(f"Current Close: {current_candle[constant.CLOSE]}, Previous High: {previous_candle[constant.HIGH]}")
+
                     if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
-                        high_values = [float(data.iloc[j][constant.HIGH]) for j in range(i, 1, -1)]
-                        try:
-                            max_high = max(high_values)
-                        except:
-                            max_high = current_candle[constant.HIGH]
+                        logger.info("Condition met: current_candle[CLOSE] >= previous_candle[HIGH]")
+
+                        high_values = [float(data.iloc[-j][constant.HIGH]) for j in range(i, 1, -1)]
+                        max_high = max(high_values) if high_values else current_candle[constant.HIGH]
+                        logger.info(f"Computed max_high from high_values: {max_high}")
+
                         self.price = max_high
                         self.trading_price = max_high
                         self.trade_details["index"] = token
+                        logger.info(f"Trade Price Set: {self.price}")
                         break
 
                     elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
                         float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
                     ):
-                        # No need to reassign current_candle and previous_candle here since it's already done above.
+                        logger.info("Fallback condition met: High diff < Previous High-Low range")
+
                         self.price = current_candle[constant.HIGH]
                         self.trading_price = current_candle[constant.HIGH]
                         self.trade_details["index"] = token
+                        logger.info(f"Trade Price Set (Fallback): {self.price}")
                         break
 
-            # buying conditions
             if (not self.to_buy) and (token == self.trade_details["index"]):
+                logger.info(f"Checking BUY condition: LTP={ltp} | Required > {constant.BUYING_MULTIPLIER * self.price}")
                 if ltp > (constant.BUYING_MULTIPLIER * self.price):
+                    logger.info("BUY condition met. Placing buy.")
+
                     self.to_buy = True
                     self.waiting_to_modify = True
                     self.waiting_to_modify_or_sell = True
-
                     self.waiting_for_buy = False
-
                     self.price = ltp
+
                     self.trade_details["success"] = True
                     self.trade_details["index"] = token
-
                     self.trade_details["datetime"] = datetime.now()
 
-                    write_logs(
-                        "BOUGHT", token, self.price, "NILL", f"LTP > condition matched self.price {self.trading_price}"
-                    )
+                    write_logs("BOUGHT", token, self.price, "NILL", f"LTP > condition matched. Price: {self.trading_price}")
 
                     return (Signal.BUY, self.price, index_info)
+
+                logger.info("BUY condition not met. Waiting to Buy.")
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
-            # # modify stop loss conditions
-            # elif self.to_buy and not self.to_modify and self.waiting_to_modify and self.trade_details["index"] == token:
-            #     if ltp > (self.price*1.20):
-            #         logger.info(f"Modifying the stop-loss, ltp is 20%greater than original price")
-            #         self.price = ltp
-            #         # modifying the stop loss
-            #         return (Signal.MODIFY, self.price, index_info)
-            #     elif (data.iloc[1]["Low"] * 0.98) > self.stop_loss_price:
-            #         logger.info(f"Modifying the stoploss price, current-low {data.iloc[1]['Low']} vs stop-loss-price {self.stop_loss_price} ")
-            #         self.price = self.stop_loss_price
-            #         # modifying the stop loss
-            #         return (Signal.MODIFY, self.price, index_info)
-            #     else:
-            #         return (Signal.WAITING_TO_MODIFY, self.price, index_info)
-
-            # direct selling condition
             elif not self.waiting_for_buy:
-                if (
-                    self.to_buy
-                    and self.waiting_to_modify_or_sell
-                    and self.trade_details["index"] == token
-                    and self.trade_details["success"] == True
-                ):
-
-                    # finding max of three
+                logger.info("Status: NOT waiting for buy. Checking SELL condition only.")
+                print(self.to_buy, self.waiting_to_modify_or_sell, self.trade_details["index"], self.trade_details["success"], "values for checking")   
+                if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details["success"]:
                     stoploss_1 = self.stop_loss_price
                     stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
                     stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
 
+                    logger.info(f"Checking Stop Loss Conditions: [{stoploss_1}, {stoploss_2}, {stoploss_3}]")
+
                     if ltp >= (constant.TRAIL_SL_1 * self.price):
-                        self.stop_loss_price = max(
-                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
-                        )
+                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
                         self.price = self.stop_loss_price
-                        logger.info(f"Modifying the stop-loss 20% condition, New_SL={self.stop_loss_price}")
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                        logger.info(f"Trail SL 1 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
 
                     elif ltp >= (constant.TRAIL_SL_2 * self.price):
-                        self.stop_loss_price = max(
-                            round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1
-                        )
+                        self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
                         self.price = self.stop_loss_price
-                        logger.info(f"Modifying the stop-loss 10% condition, New_SL={self.stop_loss_price}")
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                        logger.info(f"Trail SL 2 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
 
                     elif stoploss_condition_1 > self.stop_loss_price:
                         self.stop_loss_price = stoploss_condition_1
                         self.price = self.stop_loss_price
-                        logger.info(
-                            f"Modifying the stop-loss according to Low condition, New_SL={self.stop_loss_price}"
-                        )
-                        return (Signal.MODIFY, self.stop_loss_price, index_info)
+                        logger.info(f"Low-based SL adjustment. New Stop Loss (stored internally): {self.stop_loss_price}")
 
-                    elif ltp <= self.stop_loss_price:
+                    if ltp <= self.stop_loss_price:
+                        logger.info(f"LTP hit stop loss: {ltp} <= {self.stop_loss_price}. Triggering SELL.")
+
                         self.trade_details["success"] = False
                         self.trade_details["index"] = None
                         self.trade_details["datetime"] = datetime.now()
 
                         self.to_buy = False
                         self.waiting_to_modify_or_sell = False
-
                         self.to_sell = True
                         self.waiting_for_buy = True
-                        return (Signal.SELL, ltp, index_info)
-                    else:
-                        self.waiting_to_modify_or_sell = True
-                        return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
-                else:
-                    self.waiting_to_modify_or_sell = True
-                    return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.stop_loss_price, index_info)
 
-            elif self.waiting_to_modify_or_sell:
-                return (Signal.WAITING_FOR_MODIFY_OR_SELL, self.price, index_info)
+                        return (Signal.SELL, ltp, index_info)
+
+                    logger.info("Holding. Internal SL updated if needed. No signal sent.")
+                    return (Signal.NULL, self.stop_loss_price, index_info)
+
+                else:
+                    logger.info("Conditions not matched for Sell logic. Continuing to wait.")
+                    return (Signal.NULL, self.stop_loss_price, index_info)
 
             else:
+                logger.info("Fallback: Resetting to WAITING_TO_BUY.")
                 self.waiting_for_buy = True
                 self.trade_details["success"] = False
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
+
         except Exception as exc:
             logger.error(f"An error occurred while checking indicators: {exc}")
             return (Signal.NULL, 0, [])
@@ -703,11 +704,18 @@ class BaseStrategy:
         self.parameters_amount = extra_args_amount
         self.lotsize: int
         self.trading_quantity: int
-        self.buying_price: int
+        self.buying_price: float = 0.0
         self.current_profit: float = current_profit
         self.target_profit: float = target_profit
         self.token_id: str = ""
         self.strategy_id: str = strategy_id
+
+        self.last_trade = {
+            "symbol": None,
+            "buy_price": 0.0,
+            "quantity": 0,
+            "timestamp": None
+        }
 
     # data = {
     #         token: str,
@@ -819,11 +827,38 @@ class BaseStrategy:
                                     self.lotsize = int(instrument.lotsize)
                                     # self.token_id = instrument.token
 
-                            amount = self.parameters_amount[index]
-                            number_of_stocks = int(amount / (self.indicator.price * self.lotsize))
-                            quantity = self.lotsize * number_of_stocks
+                            # amount = self.parameters_amount[index]
+                            # number_of_stocks = int(amount / (self.indicator.price * self.lotsize))
+                            # quantity = self.lotsize * number_of_stocks
+                            # self.trading_quantity = quantity
+                            # logger.info(f"Trade Quantity for {index} - {quantity}")
+                            amount = self.parameters_amount[index] 
+                            requested_quantity = self.parameters[index]  # already in units (e.g., 75 for 1 lot)
+
+                            lot_price = self.indicator.price * self.lotsize
+                            affordable_lots = int(amount / lot_price)
+                            affordable_quantity = affordable_lots * self.lotsize
+
+                            logger.info(
+                                f"[{index}] Amount: {amount}, Lot Price: {lot_price}, "
+                                f"Requested Quantity: {requested_quantity}, Affordable Quantity: {affordable_quantity}"
+                            )
+
+                            if affordable_lots == 0:
+                                logger.warning(f"[{index}] Amount {amount} is insufficient to buy even one lot (lot price: {lot_price})")
+                                quantity = 0
+                            else:
+                                # Trade the smaller of requested or affordable quantity
+                                quantity = min(requested_quantity, affordable_quantity)
+                                logger.info(f"[{index}] Final trade quantity selected: {quantity}")
+
+                            # Final assignment
                             self.trading_quantity = quantity
-                            logger.info(f"Trade Quantity for {index} - {quantity}")
+                            logger.info(f"[{index}] Final Trade Quantity: {self.trading_quantity}")
+
+
+
+
 
                         current_time = datetime.now()
 
@@ -837,27 +872,66 @@ class BaseStrategy:
                         # print(f"#############{saved_trade}###############")
                         # saved_trade = save_trade(new_trade)
 
-                        self.indicator.order_id, trade_book_full_response = await async_return(
-                            self.data_provider.place_order(
-                                index_info[0],
-                                index_info[1],
-                                "BUY",
-                                "LIMIT",
-                                self.indicator.price,
-                                self.trading_quantity,
-                            )
-                        )
-
+                        # self.indicator.order_id, trade_book_full_response = await async_return(
+                        #     self.data_provider.place_order(
+                        #         index_info[0],
+                        #         index_info[1],
+                        #         "BUY",
+                        #         "MARKET",
+                        #         self.indicator.price,
+                        #         self.trading_quantity,
+                        #     )
+                        # )
                         # await place_order_mail(db)
-
-                        # uncomment to start actual trading
+                        if self.trading_quantity == 0:
+                            logger.warning(f"Trading quantity is zero for {index}. Stopping strategy {self.strategy_id}.")
+                            
+                            # Set stop event to terminate all strategy tasks
+                            self.stop_event.set()
+                            
+                            # No API call - Just terminate the strategy internally
+                            logger.info(f"Terminating strategy {self.strategy_id} due to zero quantity")
+                            
+                            # Break out of the process_data loop
+                            return
                         self.indicator.order_id, trade_book_full_response = await async_return(
-                            self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
-                                                           price_returned, self.parameters[index]))
-                        self.indicator.price = float(trade_book_full_response['fillprice'])
+                        self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
+                                                       price_returned, self.parameters[index]))
+                    
+                    # Check if order was rejected
+                        if trade_book_full_response.get("status") == "rejected":
+                            logger.warning(f"Buy order was rejected: {trade_book_full_response.get('text')}")
+                            # Reset the indicator state to waiting_for_buy
+                            self.indicator.to_buy = False
+                            self.indicator.waiting_to_modify = False
+                            self.indicator.waiting_to_modify_or_sell = False
+                            self.indicator.waiting_for_buy = True
+                            self.indicator.trade_details["success"] = False
+                            logger.info("Resetting to waiting for buy state after order rejection")
+                            continue  # Skip the rest of the loop and continue watching for buy signals
+                        
+                        # If order was successful, continue with normal flow
+                        self.indicator.price = float(price_returned)
+                        self.buying_price = float(price_returned)
+                        self.last_trade = {
+                            "symbol": index,
+                            "buy_price": self.buying_price,
+                            "quantity": self.trading_quantity,
+                            "timestamp": datetime.now()
+                        }
                         self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
                         logger.info(
-                            f"Trade BOUGHT at {float(trade_book_full_response['fillprice'])} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+                            f"Trade BOUGHT at {float(price_returned)} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
+
+                        # uncomment to start actual trading
+                        # self.indicator.order_id, trade_book_full_response = await async_return(
+                        #     self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
+                        #                                    price_returned, self.parameters[index]))
+                        # # self.indicator.price = float(trade_book_full_response['fillprice'])
+                        # self.indicator.price = float(price_returned)
+                        # self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        # logger.info(
+                        #     f"Trade BOUGHT at {float(price_returned)} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
 
                     elif signal == Signal.SELL:
                         # uncomment to start paper trading
@@ -899,8 +973,35 @@ class BaseStrategy:
                         self.indicator.order_id, trade_book_full_response = await async_return(
                             self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET",
                                                            price_returned, self.parameters[index]))
+                        sell_price = float(price_returned)
+                        if self.last_trade["symbol"] == index and float(self.last_trade["buy_price"]) > 0:
+                            buy_price = float(self.last_trade["buy_price"])
+                            quantity = int(self.last_trade["quantity"])
+                            
+                            # Calculate profit for this trade
+                            trade_profit = (sell_price - buy_price) * quantity
+                            
+                            # Update cumulative profit
+                            self.current_profit += float(trade_profit)
+                            
+                            logger.info(f"Trade profit: {trade_profit:.2f} (Buy: {buy_price:.2f}, Sell: {sell_price:.2f}, Qty: {quantity})")
+                            logger.info(f"Cumulative profit updated: {self.current_profit:.2f}")
+                            
+                            # Reset last trade data
+                            self.buying_price = 0.0
+                            self.last_trade = {
+                                "symbol": None,
+                                "buy_price": 0.0,
+                                "quantity": 0,
+                                "timestamp": None
+                            }
+                        else:
+                            logger.warning(f"Sell signal for {index} but no matching buy record found. Cannot calculate profit.")
+                        
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                        logger.info(f"TRADE SOLD at {float(trade_book_full_response['fillprice'])} in {index_info[0]}")
+                        logger.info(f"TRADE SOLD at {float(price_returned)} in {index_info[0]}")
+                #         self.indicator.price, self.indicator.stop_loss_price = 0, 0
+                #         logger.info(f"TRADE SOLD at {float(price_returned)} in {index_info[0]}")
 
                 else:
                     logger.info("Waiting for data...")
@@ -941,21 +1042,6 @@ class BaseStrategy:
     async def stop(self):
         self.stop_event.set()
 
-
-# def on_data(wsapp, msg):
-#     """Handles incoming WebSocket data."""
-#     try:
-#         token = msg.get('token')
-#         ltp = msg.get('last_traded_price', 0) / 100.0  # Convert to proper format
-        
-#         LIVE_FEED_JSON[token] = {
-#             'token': token,
-#             'ltp': ltp,
-#             'exchange_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-#         }
-#         logger.info(f"Live Data Received: {LIVE_FEED_JSON}")
-#     except Exception as e:
-#         logger.error(f"Error in on_data: {e}")
 
 def on_data(wsapp, msg):
     """Handles incoming WebSocket data."""
@@ -999,13 +1085,13 @@ def on_error(wsapp, error):
     """Handles WebSocket errors."""
     logger.error(f"WebSocket Error: {error}")
 
-# def on_close(wsapp):
-#     """Handles WebSocket disconnections."""
-#     logger.info("WebSocket Connection Closed")
+
 def on_close(wsapp, status, reason):
     """Handles WebSocket disconnections."""
     logger.info(f"WebSocket Connection Closed with status: {status}, reason: {reason}")
     # Perform any necessary cleanup or reconnection logic here, if needed
+
+    
 def close_connection(sws):
     """Closes WebSocket connection properly."""
     sws.max_retry_attempt = 0  # Stop retry attempts
@@ -1039,66 +1125,7 @@ def connectFeed(sws, token_list=None):
 
     threading.Thread(target=sws.connect, daemon=True).start()
 
-# @router.post("/start_strategy")
-# async def start_strategy(strategy_params: StartStrategySchema):
-#     try:
-#         print("STRATEGY PARAMS", strategy_params)
-#         current_profit = -1
-#         target_profit = strategy_params.target_profit
-#         strategy_id = strategy_params.strategy_id
-#         index_and_candle_durations = {}
-#         quantity_index = {}
-#         amount_index = {}
 
-#         for index in strategy_params.index_list:
-#             key = f"{index.index}{index.expiry}{index.strike_price}{index.option}"
-#             index_and_candle_durations[key] = index.chart_time
-#             quantity_index[key] = index.quantity
-#             amount_index[key] = index.trading_amount
-
-#         if strategy_id in tasks:
-#             raise HTTPException(status_code=400, detail="Strategy already running")
-
-
-#         try:
-#             smart.generateSession(clientCode=CLIENT_CODE, password=PASSWORD, totp=pyotp.TOTP(TOKEN_CODE).now())
-#             ltp_smart.generateSession(
-#                 clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
-#             )
-#         except Exception as e:
-#             return {"message": str(e), "success": True}
-
-#         instrument_reader = OpenApiInstrumentReader(NFO_DATA_URL, list(index_and_candle_durations.keys()))
-#         smart_api_provider = SmartApiDataProvider(smart, ltp_smart)
-#         max_transactions_indicator = MultiIndexStrategy()
-
-#         strategy = BaseStrategy(
-#             instrument_reader,
-#             smart_api_provider,
-#             max_transactions_indicator,
-#             index_and_candle_durations,
-#             quantity_index,
-#             amount_index,
-#             current_profit,
-#             target_profit,
-#             strategy_id,
-#         )
-#         strategy.ltp_comparison_interval = 5
-
-#         task = asyncio.create_task(strategy.run(), name=strategy_id)
-#         tasks[strategy_id] = task
-
-#         response = {"message": "strategy starts", "success": True, "strategy_id": strategy_id}
-#         logger.info("Response", response)
-#         return response
-
-#     except Exception as exc:
-#         logger.info("Error in running strategy", exc_info=True)
-#         response = {
-#             "message": f"Strategy failed to start: {exc}",
-#             "success": False,
-#         }
-#         return response
 
 @router.post("/start_strategy")
 async def start_strategy(strategy_params: StartStrategySchema):
@@ -1215,59 +1242,7 @@ async def start_strategy(strategy_params: StartStrategySchema):
         }
         return response
 
-# Stop strategy endpoint
-# @router.get("/stop_strategy/{strategy_id}")
-# async def stop_strategy(strategy_id):
-#     try:
-#         if strategy_id not in tasks:
-#             raise HTTPException(status_code=400, detail="Strategy not found")
-#         task_info = tasks[strategy_id]
-#         task_info.cancel()
-#         await task_info
-#     except asyncio.CancelledError:
-#         del tasks[strategy_id]
-#         raise HTTPException(status_code=200, detail="Strategy Stop")
-
-#     del tasks[strategy_id]
-#     return {"message": "Strategy stopped", "success": True}
-
-
-# Create a dictionary to track WebSocket connections
-
 websocket_connections = {}
-
-# @router.get("/stop_strategy/{strategy_id}")
-# async def stop_strategy(strategy_id):
-#     try:
-#         if strategy_id not in tasks:
-#             raise HTTPException(status_code=400, detail="Strategy not found")
-        
-#         # Cancel the strategy task
-#         task_info = tasks[strategy_id]
-#         task_info.cancel()
-#         await task_info
-        
-#         # Close WebSocket connection if it exists
-#         if strategy_id in websocket_connections:
-#             try:
-#                 sws = websocket_connections[strategy_id]
-#                 close_connection(sws)
-#                 del websocket_connections[strategy_id]
-#                 logger.info(f"WebSocket connection closed for strategy {strategy_id}")
-#             except Exception as e:
-#                 logger.error(f"Error closing WebSocket for strategy {strategy_id}: {e}")
-        
-#     except asyncio.CancelledError:
-#         if strategy_id in tasks:
-#             del tasks[strategy_id]
-#         raise HTTPException(status_code=200, detail="Strategy stopped")
-
-#     # Clean up
-#     if strategy_id in tasks:
-#         del tasks[strategy_id]
-    
-#     return {"message": "Strategy and WebSocket connections stopped", "success": True}
-
 
 @router.get("/stop_strategy/{strategy_id}")
 async def stop_strategy(strategy_id: str):
@@ -1408,7 +1383,7 @@ class WebSocketEnabledDataProvider(SmartApiDataProvider):
             token_id = token.token_id
             if token_id in self.__live_feed_data and 'ltp' in self.__live_feed_data[token_id]:
                 ltp = self.__live_feed_data[token_id]['ltp']
-                logger.info(f"Using WebSocket LTP data for {token.symbol}: {ltp}")
+                logger.info(f"Using WebSocket LTP data for {token.symbol}: {ltp/100}")
                 return ltp
                 
             # Fall back to API call if WebSocket data not available
