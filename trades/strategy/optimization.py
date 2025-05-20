@@ -559,36 +559,88 @@ class MultiIndexStrategy(IndicatorInterface):
             if self.waiting_for_buy:
                 logger.info("Status: WAITING FOR BUY")
 
+                # for i in range(1, constant.TRACE_CANDLE + 1):
+                #     current_candle = data.iloc[i]
+                #     previous_candle = data.iloc[i + 1]
+
+                #     logger.info(f"Checking Candle Pair i={i}:")
+                #     logger.info(f"Current Close: {current_candle[constant.CLOSE]}, Previous High: {previous_candle[constant.HIGH]}")
+
+                #     if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
+                #         logger.info("Condition met: current_candle[CLOSE] >= previous_candle[HIGH]")
+
+                #         high_values = [float(data.iloc[-j][constant.HIGH]) for j in range(i, 1, -1)]
+                #         max_high = max(high_values) if high_values else current_candle[constant.HIGH]
+                #         logger.info(f"Computed max_high from high_values: {max_high}")
+
+                #         self.price = max_high
+                #         self.trading_price = max_high
+                #         self.trade_details["index"] = token
+                #         logger.info(f"Trade Price Set: {self.price}")
+                #         break
+
+                #     elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
+                #         float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
+                #     ):
+                #         logger.info("Fallback condition met: High diff < Previous High-Low range")
+
+                #         self.price = current_candle[constant.HIGH]
+                #         self.trading_price = current_candle[constant.HIGH]
+                #         self.trade_details["index"] = token
+                #         logger.info(f"Trade Price Set (Fallback): {self.price}")
+                #         break
                 for i in range(1, constant.TRACE_CANDLE + 1):
                     current_candle = data.iloc[i]
                     previous_candle = data.iloc[i + 1]
 
-                    logger.info(f"Checking Candle Pair i={i}:")
-                    logger.info(f"Current Close: {current_candle[constant.CLOSE]}, Previous High: {previous_candle[constant.HIGH]}")
+                    current_close = float(current_candle[constant.CLOSE])
+                    previous_high = float(previous_candle[constant.HIGH])
+                    current_high = float(current_candle[constant.HIGH])
+                    previous_low = float(previous_candle[constant.LOW])
 
-                    if current_candle[constant.CLOSE] >= previous_candle[constant.HIGH]:
-                        logger.info("Condition met: current_candle[CLOSE] >= previous_candle[HIGH]")
+                    logger.info(f"\n--- Checking Candle Pair i={i} ---")
+                    logger.info(f"Current Candle: Close={current_close}, High={current_high}")
+                    logger.info(f"Previous Candle: High={previous_high}, Low={previous_low}")
+
+                    # Primary condition
+                    if current_close >= previous_high:
+                        logger.info(f"Primary Condition Met: Current Close ({current_close}) >= Previous High ({previous_high})")
 
                         high_values = [float(data.iloc[-j][constant.HIGH]) for j in range(i, 1, -1)]
-                        max_high = max(high_values) if high_values else current_candle[constant.HIGH]
+                        max_high = max(high_values) if high_values else current_high
+
+                        logger.info(f"High values for range(i={i} to 1): {high_values}")
                         logger.info(f"Computed max_high from high_values: {max_high}")
 
                         self.price = max_high
                         self.trading_price = max_high
                         self.trade_details["index"] = token
-                        logger.info(f"Trade Price Set: {self.price}")
+                        logger.info(f"✅ Trade Price Set (Primary): {self.price}")
                         break
 
-                    elif (8 * (float(current_candle[constant.HIGH]) - float(current_candle[constant.HIGH]))) < (
-                        float(previous_candle[constant.HIGH]) - float(previous_candle[constant.LOW])
-                    ):
-                        logger.info("Fallback condition met: High diff < Previous High-Low range")
+                    # Fallback condition
+                    elif (8 * (current_high - current_close)) < (previous_high - previous_low):
+                        high_diff = 8 * (current_high - current_close)
+                        range_diff = previous_high - previous_low
 
-                        self.price = current_candle[constant.HIGH]
-                        self.trading_price = current_candle[constant.HIGH]
+                        logger.info(f"Fallback Condition Met:")
+                        logger.info(f"8 * (Current High - Current Close) = {high_diff}")
+                        logger.info(f"Previous High - Previous Low = {range_diff}")
+                        logger.info(f"{high_diff} < {range_diff}")
+
+                        self.price = current_high
+                        self.trading_price = current_high
                         self.trade_details["index"] = token
-                        logger.info(f"Trade Price Set (Fallback): {self.price}")
+                        logger.info(f"✅ Trade Price Set (Fallback): {self.price}")
                         break
+
+                    else:
+                        logger.info("No condition matched for this pair.")
+
+                else:
+                    logger.info("❌ No pre-buying condition matched for any candle pair.")
+
+
 
             if (not self.to_buy) and (token == self.trade_details["index"]):
                 logger.info(f"Checking BUY condition: LTP={ltp} | Required > {constant.BUYING_MULTIPLIER * self.price}")
@@ -777,7 +829,9 @@ class BaseStrategy:
                     #     continue
 
                     latest_candle = data.iloc[1]
+                    second_latest_candle = data.iloc[2]
                     print("latest candle", latest_candle)
+                    print("second latest candle", second_latest_candle)
                     # Implement your comparison logic here
                     print("Current profit", self.current_profit, self.target_profit)
                     if self.current_profit >= self.target_profit:
