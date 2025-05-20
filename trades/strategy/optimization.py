@@ -547,7 +547,7 @@ class MultiIndexStrategy(IndicatorInterface):
     #     self.trade_details = {"success": True, "index": None, "datetime": datetime.now()}
 
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
-        ltp = ltp_value / 100
+        ltp = ltp_value 
 
         token = str(passed_token).split(":")[-1]
         symbol_token = str(passed_token).split(":")[1]
@@ -766,7 +766,7 @@ class BaseStrategy:
         print(f"calling process data")
         try:
             for index, value in INDEX_CANDLE_DATA:
-                await asyncio.sleep(1)
+                await asyncio.sleep(1) 
                 print("Inside try")
                 if value and self.index_ltp_values[index]:
                     columns = ["timestamp", "Open", "High", "Low", "Close", "Volume"]
@@ -1061,10 +1061,17 @@ def on_data(wsapp, msg):
             return
             
         # Convert LTP to proper format (some APIs return in paise/cents)
+        # ltp_raw = msg.get('last_traded_price', 0)
+        # # Decide if we need to divide by 100 based on value
+        # ltp = ltp_raw / 100.0 if ltp_raw > 10000 else ltp_raw  
         ltp_raw = msg.get('last_traded_price', 0)
-        # Decide if we need to divide by 100 based on value
-        ltp = ltp_raw / 100.0 if ltp_raw > 10000 else ltp_raw  
-        
+
+        # Ensure it's a float
+        ltp_raw = float(ltp_raw)
+
+        # Check if the integer part has more than 3 digits (e.g., 11725 -> divide)
+        ltp = ltp_raw / 100.0 if ltp_raw >= 1000 else ltp_raw
+
         # Update global dictionary with latest data
         LIVE_FEED_JSON[token] = {
             'token': token,
@@ -1383,7 +1390,7 @@ class WebSocketEnabledDataProvider(SmartApiDataProvider):
             token_id = token.token_id
             if token_id in self.__live_feed_data and 'ltp' in self.__live_feed_data[token_id]:
                 ltp = self.__live_feed_data[token_id]['ltp']
-                logger.info(f"Using WebSocket LTP data for {token.symbol}: {ltp/100}")
+                logger.info(f"Using WebSocket LTP data for {token.symbol}: {ltp}")
                 return ltp
                 
             # Fall back to API call if WebSocket data not available
