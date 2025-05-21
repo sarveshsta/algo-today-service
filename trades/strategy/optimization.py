@@ -70,7 +70,7 @@ class Constants:
         self.LTP_PASSWORD = "4242"
         self.LTP_TOKEN_CODE = "QRLYAZPZ6LMTH5AYILGTWWN26E"
 
-        self.TRACE_CANDLE = 8
+        self.TRACE_CANDLE = 2
         self.CLOSE = "Close"
         self.HIGH = "High"
         self.LOW = "Low"
@@ -796,8 +796,29 @@ class BaseStrategy:
         except Exception as e:
             logger.error(f"An error occurred while fetching LTP data: {e}")
 
+    # async def fetch_candle_data(self):
+    #     try:
+    #         for instrument in self.instruments:
+    #             self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
+    #             candle_duration = self.index_candle_durations[instrument.symbol]
+    #             candle_data = await async_return(
+    #                 self.data_provider.fetch_candle_data(self.token, interval=candle_duration)
+    #             )
+    #             # candle_data = async_return(candle_data)
+    #             if candle_data is None or len(candle_data) == 0:
+    #                 logger.error(f"No candle data returned for {instrument.symbol}")
+    #                 continue  # Continue to the next instrument
+    #             # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
+    #             # print(f"checking candle ======> {candle_data}")
+    #             INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
+    #     except logging.exception:
+    #         logger.error(f"An error occurred while fetching candle data")
     async def fetch_candle_data(self):
         try:
+            # Clear INDEX_CANDLE_DATA at the beginning of each fetch operation
+            global INDEX_CANDLE_DATA
+            INDEX_CANDLE_DATA = []  # Clear the list before fetching new data
+            
             for instrument in self.instruments:
                 self.token = Token(instrument.exch_seg, instrument.token, instrument.symbol)
                 candle_duration = self.index_candle_durations[instrument.symbol]
@@ -811,8 +832,10 @@ class BaseStrategy:
                 # INDEX_CANDLE_DATA.update({str(instrument.symbol) : candle_data})
                 # print(f"checking candle ======> {candle_data}")
                 INDEX_CANDLE_DATA.append((str(instrument.symbol), candle_data))
-        except logging.exception:
-            logger.error(f"An error occurred while fetching candle data")
+                
+            logger.info(f"Fetched candle data for {len(INDEX_CANDLE_DATA)} instruments")
+        except Exception as e:
+            logger.error(f"An error occurred while fetching candle data: {e}", exc_info=True)
 
     async def process_data(self):
         print(f"calling process data")
@@ -1066,11 +1089,13 @@ class BaseStrategy:
     async def start(self):
         try:
             while not self.stop_event.is_set():
+                logger.info("*****************************************************..again fetching candle data..*****************************************************")
                 await self.fetch_candle_data()
                 await asyncio.sleep(10)  # fetch candle data every 10 seconds
         except asyncio.CancelledError:
             logger.info("start task was cancelled")
             raise
+    
 
     async def run(self):
         await asyncio.gather(self.fetch_ltp_data_continuous(), self.process_data_continuous(), self.start())
