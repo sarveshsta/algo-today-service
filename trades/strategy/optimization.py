@@ -226,7 +226,7 @@ class DataProviderInterface:
     def get_trade_book(self, order_id):
         raise NotImplementedError("Subclasses must implement get_trade_boo()")
 
-    def get_order_book(self, order_id):
+    def get_order_book(self, order_id): 
         raise NotImplementedError("Subclasses must implement get_order_book()")
 
 
@@ -596,6 +596,7 @@ class MultiIndexStrategy(IndicatorInterface):
                     current_close = float(current_candle[constant.CLOSE])
                     previous_high = float(previous_candle[constant.HIGH])
                     current_high = float(current_candle[constant.HIGH])
+                    current_low = float(current_candle[constant.LOW])
                     previous_low = float(previous_candle[constant.LOW])
 
                     logger.info(f"\n--- Checking Candle Pair i={i} ---")
@@ -603,13 +604,45 @@ class MultiIndexStrategy(IndicatorInterface):
                     logger.info(f"Previous Candle: High={previous_high}, Low={previous_low}")
 
                     # Primary condition
+                    # if current_close >= previous_high:
+                    #     logger.info(f"Primary Condition Met: Current Close ({current_close}) >= Previous High ({previous_high})")
+
+                    #     high_values = [float(data.iloc[j][constant.HIGH]) for j in range(i, 1, -1)]
+                    #     max_high = max(high_values) if high_values else current_high
+
+                    #     logger.info(f"High values for range(i={i} to 1): {high_values}")
+                    #     logger.info(f"Computed max_high from high_values: {max_high}")
+
+                    #     self.price = max_high
+                    #     self.trading_price = max_high
+                    #     self.trade_details["index"] = token
+                    #     logger.info(f"✅ Trade Price Set (Primary): {self.price}")
+                    #     break
                     if current_close >= previous_high:
                         logger.info(f"Primary Condition Met: Current Close ({current_close}) >= Previous High ({previous_high})")
 
-                        high_values = [float(data.iloc[-j][constant.HIGH]) for j in range(i, 1, -1)]
+                        high_values = []
+                        candle_details = []
+
+                        for j in range(i, 1, -1):
+                            candle = data.iloc[j]
+                            high = float(candle[constant.HIGH])
+                            high_values.append(high)
+                            candle_details.append({
+                                "timestamp": candle["timestamp"],
+                                "open": candle[constant.OPEN],
+                                "high": candle[constant.HIGH],
+                                "low": candle[constant.LOW],
+                                "close": candle[constant.CLOSE],
+                            })
+
                         max_high = max(high_values) if high_values else current_high
 
                         logger.info(f"High values for range(i={i} to 1): {high_values}")
+                        logger.info(f"Candle details used to calculate highs:")
+                        for candle in candle_details:
+                            logger.info(f"🕒 {candle['timestamp']} | O: {candle['open']} H: {candle['high']} L: {candle['low']} C: {candle['close']}")
+
                         logger.info(f"Computed max_high from high_values: {max_high}")
 
                         self.price = max_high
@@ -618,14 +651,15 @@ class MultiIndexStrategy(IndicatorInterface):
                         logger.info(f"✅ Trade Price Set (Primary): {self.price}")
                         break
 
+
                     # Fallback condition
-                    elif (8 * (current_high - current_close)) < (previous_high - previous_low):
+                    elif (8 * (current_high - current_close)) < (current_high - current_low):
                         high_diff = 8 * (current_high - current_close)
-                        range_diff = previous_high - previous_low
+                        range_diff = current_high - current_low
 
                         logger.info(f"Fallback Condition Met:")
                         logger.info(f"8 * (Current High - Current Close) = {high_diff}")
-                        logger.info(f"Previous High - Previous Low = {range_diff}")
+                        logger.info(f"Current High - Current Low = {range_diff}")
                         logger.info(f"{high_diff} < {range_diff}")
 
                         self.price = current_high
@@ -639,6 +673,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
                 else:
                     logger.info("❌ No pre-buying condition matched for any candle pair.")
+                    self.trade_details["index"] = ""
 
 
 
@@ -664,34 +699,84 @@ class MultiIndexStrategy(IndicatorInterface):
                 logger.info("BUY condition not met. Waiting to Buy.")
                 return (Signal.WAITING_TO_BUY, self.price, index_info)
 
+            # elif not self.waiting_for_buy:
+            #     logger.info("Status: NOT waiting for buy. Checking SELL condition only.")
+            #     print(self.to_buy, self.waiting_to_modify_or_sell, self.trade_details["index"], self.trade_details["success"], "values for checking")   
+            #     if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details["success"]:
+            #         stoploss_1 = self.stop_loss_price
+            #         stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
+            #         stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
+            #         stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
+
+            #         logger.info(f"Checking Stop Loss Conditions: [{stoploss_1}, {stoploss_2}, {stoploss_3}]")
+
+            #         if ltp >= (constant.TRAIL_SL_1 * self.price):
+            #             self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+            #             self.price = self.stop_loss_price
+            #             logger.info(f"Trail SL 1 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
+
+            #         elif ltp >= (constant.TRAIL_SL_2 * self.price):
+            #             self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+            #             self.price = self.stop_loss_price
+            #             logger.info(f"Trail SL 2 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
+
+            #         elif stoploss_condition_1 > self.stop_loss_price:
+            #             self.stop_loss_price = stoploss_condition_1
+            #             self.price = self.stop_loss_price
+            #             logger.info(f"Low-based SL adjustment. New Stop Loss (stored internally): {self.stop_loss_price}")
+
+            #         if ltp <= self.stop_loss_price:
+            #             logger.info(f"LTP hit stop loss: {ltp} <= {self.stop_loss_price}. Triggering SELL.")
+
+            #             self.trade_details["success"] = False
+            #             self.trade_details["index"] = None
+            #             self.trade_details["datetime"] = datetime.now()
+
+            #             self.to_buy = False
+            #             self.waiting_to_modify_or_sell = False
+            #             self.to_sell = True
+            #             self.waiting_for_buy = True
+
+            #             return (Signal.SELL, ltp, index_info)
+
+            #         logger.info("Holding. Internal SL updated if needed. No signal sent.")
+            #         return (Signal.NULL, self.stop_loss_price, index_info)
+
+            #     else:
+            #         logger.info("Conditions not matched for Sell logic. Continuing to wait.")
+            #         return (Signal.NULL, self.stop_loss_price, index_info)
             elif not self.waiting_for_buy:
                 logger.info("Status: NOT waiting for buy. Checking SELL condition only.")
                 print(self.to_buy, self.waiting_to_modify_or_sell, self.trade_details["index"], self.trade_details["success"], "values for checking")   
+
                 if self.to_buy and self.waiting_to_modify_or_sell and self.trade_details["index"] == token and self.trade_details["success"]:
                     stoploss_1 = self.stop_loss_price
                     stoploss_2 = data.iloc[1]["Low"] * constant.SL_LOW_MULTIPLIER_1
                     stoploss_3 = min([data.iloc[1]["Low"], data.iloc[2]["Low"]]) * constant.SL_LOW_MULTIPLIER_2
                     stoploss_condition_1 = round(max([stoploss_1, stoploss_2, stoploss_3]), 2)
 
-                    logger.info(f"Checking Stop Loss Conditions: [{stoploss_1}, {stoploss_2}, {stoploss_3}]")
+                    logger.info(f"[Stop Loss Calculation] Existing SL: {stoploss_1:.2f}, SL2: {stoploss_2:.2f}, SL3: {stoploss_3:.2f} => Chosen: {stoploss_condition_1:.2f}")
+                    logger.info(f"Current LTP: {ltp:.2f}, TRAIL_SL_1 Threshold: {constant.TRAIL_SL_1 * self.price:.2f}, TRAIL_SL_2 Threshold: {constant.TRAIL_SL_2 * self.price:.2f}")
 
                     if ltp >= (constant.TRAIL_SL_1 * self.price):
                         self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+                        logger.info(f"[TRAIL_SL_1] Condition hit. New SL set to: {self.stop_loss_price:.2f} based on max(price * MODITY_SL_1, condition_1)")
                         self.price = self.stop_loss_price
-                        logger.info(f"Trail SL 1 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
 
                     elif ltp >= (constant.TRAIL_SL_2 * self.price):
                         self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
+                        logger.info(f"[TRAIL_SL_2] Condition hit. New SL set to: {self.stop_loss_price:.2f} based on max(price * MODITY_SL_1, condition_1)")
                         self.price = self.stop_loss_price
-                        logger.info(f"Trail SL 2 hit. New Stop Loss (stored internally): {self.stop_loss_price}")
 
                     elif stoploss_condition_1 > self.stop_loss_price:
+                        logger.info(f"[Low-Based SL Adjustment] Condition hit. SL adjusted from {self.stop_loss_price:.2f} to {stoploss_condition_1:.2f}")
                         self.stop_loss_price = stoploss_condition_1
                         self.price = self.stop_loss_price
-                        logger.info(f"Low-based SL adjustment. New Stop Loss (stored internally): {self.stop_loss_price}")
+                    
+                    logger.info(f"Final Stop Loss Price after all checks: {self.stop_loss_price:.2f}")
 
                     if ltp <= self.stop_loss_price:
-                        logger.info(f"LTP hit stop loss: {ltp} <= {self.stop_loss_price}. Triggering SELL.")
+                        logger.info(f"[SELL TRIGGER] LTP {ltp:.2f} <= SL {self.stop_loss_price:.2f}. Triggering SELL.")
 
                         self.trade_details["success"] = False
                         self.trade_details["index"] = None
@@ -704,7 +789,7 @@ class MultiIndexStrategy(IndicatorInterface):
 
                         return (Signal.SELL, ltp, index_info)
 
-                    logger.info("Holding. Internal SL updated if needed. No signal sent.")
+                    logger.info("[HOLD] No SL hit. Continuing to monitor. SL may have been updated.")
                     return (Signal.NULL, self.stop_loss_price, index_info)
 
                 else:
@@ -904,37 +989,52 @@ class BaseStrategy:
                                     self.lotsize = int(instrument.lotsize)
                                     # self.token_id = instrument.token
 
-                            # amount = self.parameters_amount[index]
-                            # number_of_stocks = int(amount / (self.indicator.price * self.lotsize))
-                            # quantity = self.lotsize * number_of_stocks
+                            # amount = self.parameters_amount[index] 
+                            # requested_quantity = self.parameters[index]  # already in units (e.g., 75 for 1 lot)
+
+                            # lot_price = self.indicator.price * self.lotsize
+                            # affordable_lots = int(amount / lot_price)
+                            # affordable_quantity = affordable_lots * self.lotsize
+
+                            # logger.info(
+                            #     f"[{index}] Amount: {amount}, Lot Price: {lot_price}, "
+                            #     f"Requested Quantity: {requested_quantity}, Affordable Quantity: {affordable_quantity}"
+                            # )
+
+                            # if affordable_lots == 0:
+                            #     logger.warning(f"[{index}] Amount {amount} is insufficient to buy even one lot (lot price: {lot_price})")
+                            #     quantity = 0
+                            # else:
+                            #     # Trade the smaller of requested or affordable quantity
+                            #     quantity = min(requested_quantity, affordable_quantity)
+                            #     logger.info(f"[{index}] Final trade quantity selected: {quantity}")
+
+                            # # Final assignment
                             # self.trading_quantity = quantity
-                            # logger.info(f"Trade Quantity for {index} - {quantity}")
-                            amount = self.parameters_amount[index] 
-                            requested_quantity = self.parameters[index]  # already in units (e.g., 75 for 1 lot)
+                            # logger.info(f"[{index}] Final Trade Quantity: {self.trading_quantity}")
+                            amount = self.parameters_amount[index]  # Amount client is willing to spend
+                            requested_lots = self.parameters[index]  # Number of lots client wants to buy (e.g., 1, 2)
 
-                            lot_price = self.indicator.price * self.lotsize
-                            affordable_lots = int(amount / lot_price)
-                            affordable_quantity = affordable_lots * self.lotsize
+                            lot_price = self.indicator.price * self.lotsize  # Cost of 1 lot
+                            affordable_lots = int(amount / lot_price)  # How many lots they can afford
+                            final_lots = min(requested_lots, affordable_lots)  # Pick whichever is lower
+                            quantity = final_lots * self.lotsize  # Final quantity = lots × lot size
 
+                            # Logs
                             logger.info(
-                                f"[{index}] Amount: {amount}, Lot Price: {lot_price}, "
-                                f"Requested Quantity: {requested_quantity}, Affordable Quantity: {affordable_quantity}"
+                                f"[{index}] Amount: {amount}, Price: {self.indicator.price}, Lot Size: {self.lotsize}, "
+                                f"Lot Price: {lot_price}, Requested Lots: {requested_lots}, "
+                                f"Affordable Lots: {affordable_lots}, Final Lots: {final_lots}, Quantity: {quantity}"
                             )
 
-                            if affordable_lots == 0:
-                                logger.warning(f"[{index}] Amount {amount} is insufficient to buy even one lot (lot price: {lot_price})")
-                                quantity = 0
-                            else:
-                                # Trade the smaller of requested or affordable quantity
-                                quantity = min(requested_quantity, affordable_quantity)
-                                logger.info(f"[{index}] Final trade quantity selected: {quantity}")
+                            # Safety check
+                            if quantity % self.lotsize != 0:
+                                logger.error(f"[{index}] ❌ Quantity {quantity} is not a multiple of lot size {self.lotsize}")
+                                raise ValueError(f"Invalid quantity: {quantity}. Must be multiple of lot size {self.lotsize}")
 
                             # Final assignment
                             self.trading_quantity = quantity
-                            logger.info(f"[{index}] Final Trade Quantity: {self.trading_quantity}")
-
-
-
+                            logger.info(f"[{index}] ✅ Final Trade Quantity: {self.trading_quantity}")
 
 
                         current_time = datetime.now()
@@ -971,9 +1071,12 @@ class BaseStrategy:
                             
                             # Break out of the process_data loop
                             return
+                        print(self.parameters[index], "self.parameters[index]")
                         self.indicator.order_id, trade_book_full_response = await async_return(
+                        # self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
+                        #                                price_returned, self.parameters[index]))
                         self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
-                                                       price_returned, self.parameters[index]))
+                                                       price_returned, str(self.trading_quantity)))
                     
                     # Check if order was rejected
                         if trade_book_full_response.get("status") == "rejected":
@@ -1049,7 +1152,7 @@ class BaseStrategy:
                         # uncomment to start actual trading
                         self.indicator.order_id, trade_book_full_response = await async_return(
                             self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET",
-                                                           price_returned, self.parameters[index]))
+                                                           price_returned, str(self.trading_quantity)))
                         sell_price = float(price_returned)
                         if self.last_trade["symbol"] == index and float(self.last_trade["buy_price"]) > 0:
                             buy_price = float(self.last_trade["buy_price"])
@@ -1077,8 +1180,7 @@ class BaseStrategy:
                         
                         self.indicator.price, self.indicator.stop_loss_price = 0, 0
                         logger.info(f"TRADE SOLD at {float(price_returned)} in {index_info[0]}")
-                #         self.indicator.price, self.indicator.stop_loss_price = 0, 0
-                #         logger.info(f"TRADE SOLD at {float(price_returned)} in {index_info[0]}")
+                
 
                 else:
                     logger.info("Waiting for data...")
@@ -1091,7 +1193,7 @@ class BaseStrategy:
             while not self.stop_event.is_set():
                 logger.info("*****************************************************..again fetching candle data..*****************************************************")
                 await self.fetch_candle_data()
-                await asyncio.sleep(10)  # fetch candle data every 10 seconds
+                await asyncio.sleep(20)  
         except asyncio.CancelledError:
             logger.info("start task was cancelled")
             raise
@@ -1146,10 +1248,11 @@ def on_data(wsapp, msg):
         ltp_raw = msg.get('last_traded_price', 0)
 
         # Ensure it's a float
-        ltp_raw = float(ltp_raw)
+        # ltp_raw = float(ltp_raw)
 
         # Check if the integer part has more than 3 digits (e.g., 11725 -> divide)
-        ltp = ltp_raw / 100.0 if ltp_raw >= 1000 else ltp_raw
+        ltp = ltp_raw / 100.0 
+        # ltp = ltp_raw / 100.0 if ltp_raw >= 1000 else ltp_raw
 
         # Update global dictionary with latest data
         LIVE_FEED_JSON[token] = {
