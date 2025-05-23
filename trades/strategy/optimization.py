@@ -531,6 +531,11 @@ class MultiIndexStrategy(IndicatorInterface):
         self.order_id = "000000000000"
         self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         self.trade_details = {"success": False, "index": None, "datetime": datetime.now()}
+
+        self.buying_price = 0.0
+        self.quantity = 0
+        self.current_profit = 0.0
+        self.target_profit = 0.0
     # def __init__(self):
     #     self.to_buy = True
     #     self.to_modify = False
@@ -545,7 +550,13 @@ class MultiIndexStrategy(IndicatorInterface):
     #     self.order_id = "000000000000"
     #     self.uniqueOrderId = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     #     self.trade_details = {"success": True, "index": None, "datetime": datetime.now()}
-
+    def set_trade_params(self, buying_price, quantity, current_profit, target_profit):
+        """Set trade parameters needed for target stop loss calculation"""
+        self.buying_price = buying_price
+        self.quantity = quantity
+        self.current_profit = current_profit
+        self.target_profit = target_profit
+        
     def check_indicators(self, data: pd.DataFrame, passed_token: Token, ltp_value: float, index: int = 0):
         ltp = ltp_value 
 
@@ -757,6 +768,21 @@ class MultiIndexStrategy(IndicatorInterface):
 
                     logger.info(f"[Stop Loss Calculation] Existing SL: {stoploss_1:.2f}, SL2: {stoploss_2:.2f}, SL3: {stoploss_3:.2f} => Chosen: {stoploss_condition_1:.2f}")
                     logger.info(f"Current LTP: {ltp:.2f}, TRAIL_SL_1 Threshold: {constant.TRAIL_SL_1 * self.price:.2f}, TRAIL_SL_2 Threshold: {constant.TRAIL_SL_2 * self.price:.2f}")
+
+                    target_stop_loss = 0.0
+                    if self.buying_price > 0 and self.quantity > 0 and self.target_profit > self.current_profit:
+                        target_stop_loss = self.buying_price + ((self.target_profit - self.current_profit) / self.quantity)
+                        logger.info(f"[Target Stop Loss Calculation] Buying Price: {self.buying_price:.2f}, Quantity: {self.quantity}, Current Profit: {self.current_profit:.2f}, Target Profit: {self.target_profit:.2f}")
+                        logger.info(f"[Target Stop Loss] Calculated Target SL: {target_stop_loss:.2f}")
+                    else:
+                        logger.info(f"[Target Stop Loss] Cannot calculate - Missing params or target already reached")
+
+                    # Check Target Stop Loss condition first
+                    if target_stop_loss > 0 and ltp >= target_stop_loss:
+                        logger.info(f"[TARGET_SL] LTP {ltp:.2f} >= Target SL {target_stop_loss:.2f}. Updating stop loss to Target SL.")
+                        self.stop_loss_price = round(target_stop_loss, 2)
+                        self.price = self.stop_loss_price
+                        logger.info(f"[TARGET_SL] Stop loss updated to Target SL: {self.stop_loss_price:.2f}")
 
                     if ltp >= (constant.TRAIL_SL_1 * self.price):
                         self.stop_loss_price = max(round((self.price * constant.MODITY_STOP_LOSS_1), 2), stoploss_condition_1)
@@ -1100,6 +1126,12 @@ class BaseStrategy:
                             "timestamp": datetime.now()
                         }
                         self.indicator.stop_loss_price = round(self.indicator.price * 0.95, 2)
+                        self.indicator.set_trade_params(
+                            buying_price=self.buying_price,
+                            quantity=self.trading_quantity,
+                            current_profit=self.current_profit,
+                            target_profit=self.target_profit
+                        )
                         logger.info(
                             f"Trade BOUGHT at {float(price_returned)} in {index_info[0]} with SL={self.indicator.stop_loss_price}")
 
