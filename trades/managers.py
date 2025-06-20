@@ -1,16 +1,20 @@
 import requests
 from fastapi import Depends
 from sqlalchemy.orm import Session
-
 from config.constants import EXCH_TYPE, NFO_DATA_URL, OPT_TYPE
 from config.database.config import get_db
 from trades.models import Order, TokenModel, TradingData
+
 
 
 def get_tokens(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
     tokens = db.query(TokenModel).offset(skip).limit(limit).all()
     return tokens
 
+# def get_tokens(db: Session = Depends(get_db),  page: int = Query(1, ge=1), limit: int = Query(10, ge=1)):
+#     query = db.query(TokenModel)
+#     return paginate_query(query, page, limit)
+#     return tokens
 
 def delete_all_tokens(db: Session = Depends(get_db)):
     db.query(TokenModel).delete()
@@ -22,10 +26,10 @@ def fetch_tokens(db: Session = Depends(get_db)):
     url = NFO_DATA_URL
     response = requests.get(url, timeout=7)
     data = response.json()
-
+    print(data, "data")
     for instrument in data:
-        st1 = instrument["exch_seg"] == EXCH_TYPE
-        st2 = instrument["instrumenttype"] == OPT_TYPE
+        st1 = instrument["exch_seg"] == 'NFO'
+        st2 = instrument["instrumenttype"] == 'OPTIDX'
         if st1 and st2:
             db_token = TokenModel(**instrument)
             db.add(db_token)
@@ -86,25 +90,16 @@ def fetch_previous_orders(db: Session = Depends(get_db)):
         return response_list
     return None
 
-
-# def get_consts_data(db:Session = Depends(get_db)):
-#     orders = db.query(TradingData).all()
-#     if orders:
-#         response_list = [{
-#             "trace_candle": tradingdata.trace_candle,
-#             "close": TradingData,
-#             "high": "string",
-#             "low": "string",
-#             "open": "string",
-#             "buying_multiplier": 0,
-#             "stop_loss_multiplier": 0,
-#             "sl_low_multiplier_1": 0,
-#             "sl_low_multiplier_2": 0,
-#             "trail_sl_1": 0,
-#             "trail_sl_2": 0,
-#             "modify_stop_loss_1": 0,
-#             "modify_stop_loss_2": 0
-#          }
-#             for order in orders]
-#         return response_list
-#     return None
+def get_token_uuid_by_token_value(token_value: str, db: Session = Depends(get_db)):
+        """Get the UUID id from Token table using token value"""
+        try:
+            token_record = db.query(TokenModel).filter(TokenModel.token == token_value).first()
+            
+            if token_record:
+                return str(token_record.id)
+            else:
+                return None
+              
+        except Exception as e:
+            return None
+       

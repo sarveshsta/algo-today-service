@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, List
+from uuid import UUID
 from pydantic import BaseModel
 
 
@@ -71,29 +71,36 @@ class TokenSchema(BaseModel):
     class Config:
         from_attributes = True
 
+class PaginatedTokenResponse(BaseModel):
+    total: int
+    pages: int
+    current_page: int
+    per_page: int
+    data: List[TokenSchema]
 
-class TradeDetailSchema(BaseModel):
-    id: int
+
+class TradeDetailsSchema(BaseModel):
+    id: UUID
     user_id: str
     signal: str
     price: float
-    trade_time: datetime  # You can use datetime and let FastAPI format it
+    trade_time: datetime
     token: TokenSchema
 
     class Config:
         orm_mode = True
 
 
-class TradeDetailsSchema(BaseModel):
-    id: int
-    user_id: str
-    signal: str
-    price: float
-    trade_time: datetime  # You can use datetime and let FastAPI format it
-    token_id: str
+# class TradeDetailsSchema(BaseModel):
+#     id: int
+#     user_id: str
+#     signal: str
+#     price: float
+#     trade_time: datetime  # You can use datetime and let FastAPI format it
+#     token_id: str
 
-    class Config:
-        orm_mode = True
+#     class Config:
+#         orm_mode = True
 
 
 class ExpirySchema(BaseModel):

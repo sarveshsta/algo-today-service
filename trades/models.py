@@ -1,25 +1,27 @@
 from datetime import datetime
-
+import uuid
 from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, relationship
-
+from config.database.config import Base
 from core.mixins import CoreBaseModel
+from sqlalchemy.dialects.postgresql import UUID
 
-Base = declarative_base()
 
 
-class TokenModel(CoreBaseModel, Base):
-    __tablename__ = "tokens"
+class TokenModel(Base):
+    __tablename__ = "algo_app_token"
 
-    token = Column(String, unique=True, primary_key=True)
-    symbol = Column(String, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token = Column(String, unique=True)
+    symbol = Column(String)
     name = Column(String)
-    expiry_date = Column(Date, index=True)
+    expiry_date = Column(Date)
     strike = Column(String)
     lotsize = Column(String)
     instrumenttype = Column(String)
     exch_seg = Column(String)
     tick_size = Column(String)
+
 
     @property
     def expiry(self) -> str:
@@ -27,27 +29,26 @@ class TokenModel(CoreBaseModel, Base):
 
     @expiry.setter
     def expiry(self, value) -> None:
-        # self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
-        if value:  # checks for empty string or None
+        if value:
             self.expiry_date = datetime.strptime(value, "%d%b%Y").date()
         else:
             self.expiry_date = None
 
 
-class TradeDetails(CoreBaseModel, Base):
-    __tablename__ = "trades"
+class TradeDetails(Base):
+    __tablename__ = "algo_app_tradedetails"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, index=True)
     signal = Column(String, nullable=False)
     price = Column(Float, nullable=False)
-    trade_time = Column(DateTime, default=datetime.now())
+    trade_time = Column(DateTime, default=datetime.now)
 
-    # ForeignKey relationship with the TokenModel
-    token_id = Column(String, ForeignKey("tokens.token"), nullable=False)
+    token_id = Column(UUID(as_uuid=True), ForeignKey("algo_app_token.id"), nullable=False)
 
-    # Define relationship with TokenModel for easy access to token data
-    token = relationship("TokenModel", backref="trades")
+    token = relationship("TokenModel", backref="trade_details")
+
+
 
 
 class Order(Base):

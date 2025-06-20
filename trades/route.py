@@ -1,10 +1,10 @@
 from typing import List
-
+from sqlalchemy import desc
 import fastapi
 from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
-
+from middlewares.auth_middleware import verify_token
 from config.database.config import get_db
 from trades.managers import *
 from trades.models import StrategyValue, TradeDetails, TradingData
@@ -13,11 +13,10 @@ from trades.schema import (
     Order,
     StrategyDetailsSchema,
     TokenSchema,
-    TradeDetailSchema,
-    TradeDetailsSchema,
     TradingDataCreate,
     TradingDataResponse,
     TradingDataUpdate,
+    TradeDetailsSchema
 )
 
 router = fastapi.APIRouter()
@@ -28,6 +27,12 @@ async def read_tokens(skip: int = 0, limit: int = 100, db: Session = Depends(get
     tokens = get_tokens(db, skip=skip, limit=limit)
     return tokens
 
+
+# @router.get("/", response_model=PaginatedTokenResponse)
+# async def read_tokens(page: int = Query(1, ge=1),
+#     limit: int = Query(100, ge=1),
+#     db: Session = Depends(get_db)):
+#     return get_tokens(db=db, page=page, limit=limit)
 
 @router.delete("/")
 def delete_tokens(db: Session = Depends(get_db)):
@@ -41,17 +46,18 @@ def create_index_tokens(db: Session = Depends(get_db)):
     return JSONResponse({"success": True}, status_code=201)
 
 
-@router.get("/trades_details/", response_model=List[TradeDetailSchema])
+@router.get("/trades_details/", response_model=List[TradeDetailsSchema])
 async def get_trade_details(db: Session = Depends(get_db)):
-    # Fetch all trades and their related tokens using joinedload
-    trades = db.query(TradeDetails).options(joinedload(TradeDetails.token)).all()
+    trades = db.query(TradeDetails)\
+        .options(joinedload(TradeDetails.token))\
+        .order_by(desc(TradeDetails.trade_time))\
+        .all()
 
-    # If no trades are found, raise a 404 error
     if not trades:
         raise HTTPException(status_code=404, detail="No trades found")
 
-    # Return the list of trades directly, FastAPI will use the response_model to serialize
     return trades
+
 
 
 @router.get("/{index}", response_model=List[ExpirySchema])
@@ -133,3 +139,22 @@ def update_trading_data(data_id: int, trading_data: TradingDataUpdate, db: Sessi
     db.commit()
     db.refresh(db_trading_data)
     return JSONResponse({"Strategy constant updated successfully": True})
+
+
+# @router.get("/trades_details/", response_model=List[TradeDetailsSchema])
+# async def get_trade_details(
+#     db: Session = Depends(get_db),
+#     user_data: dict = Depends(verify_token)
+# ):
+#     print(user_data, "user_data")  # Should contain "user_id" and "email"
+    
+#     trades = db.query(TradeDetails)\
+#         .options(joinedload(TradeDetails.token))\
+#         .filter(TradeDetails.user_id == user_data["user_id"])\
+#         .all()
+
+#     if not trades:
+#         raise HTTPException(status_code=404, detail="No trades found")
+
+#     return trades
+

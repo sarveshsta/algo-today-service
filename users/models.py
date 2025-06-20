@@ -1,43 +1,40 @@
-from sqlalchemy import Column, Integer, String
+import uuid
+from sqlalchemy import Column, String, Boolean, Table,Text, ForeignKey, DateTime
+from sqlalchemy.dialects.postgresql import UUID
+from config.database.config import Base
+from sqlalchemy.orm import relationship
+class User(Base):
+    __tablename__ = 'algo_app_user'  # Replace with the actual table name (usually appname_modelname)
 
-from core.mixins import Base, CoreBaseModel
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(50), nullable=False, default="")
+    phone = Column(String(50), nullable=False, unique=True, index=True, default="")
+    email = Column(String, nullable=False, unique=True, default="")
+    username = Column(String(20), nullable=True, default=None)
+
+    is_active = Column(Boolean, default=True)
+    is_staff = Column(Boolean, default=False)
+    is_superuser = Column(Boolean, default=False)
+    # models/user.py
+
+    # Inside your User class:
+    angelone_credentials = relationship("AngelOneCredential", uselist=False, back_populates="user")
 
 
-class UserModel(CoreBaseModel, Base):
-    __tablename__ = "users"
 
-    access_token_encrypted = Column(String)
-    refresh_token_encrypted = Column(String)
-    feed_token_encrypted = Column(String, nullable=True)
-    broker_account_id = Column(String, unique=True, nullable=False)
-    access_token_expires = Column(Integer)
 
-    @property
-    def access_token(self) -> str:
-        # TODO: Decrypt the data before using it
-        return self.access_token_encrypted
+class AngelOneCredential(Base):
+    __tablename__ = "algo_app_angelonecredential"  
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("algo_app_user.id"), primary_key=True)  
+    client_code = Column(String(50), nullable=False)
+    password = Column(Text, nullable=False)
+    totp_secret = Column(Text, nullable=False)
+    jwt_token = Column(Text, nullable=True)
+    feed_token = Column(Text, nullable=True)
+    token_expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
 
-    @access_token.setter
-    def access_token(self, value) -> None:
-        # TODO: Encrypt the data before storing it
-        self.access_token_encrypted = value
-
-    @property
-    def refresh_token(self) -> str:
-        # TODO: Decrypt the data before using it
-        return self.refresh_token_encrypted
-
-    @refresh_token.setter
-    def refresh_token(self, value) -> None:
-        # TODO: Encrypt the data before storing it
-        self.refresh_token_encrypted = value
-
-    @property
-    def feed_token(self) -> str:
-        # TODO: Decrypt the data before using it
-        return self.feed_token_encrypted
-
-    @feed_token.setter
-    def feed_token(self, value) -> None:
-        # TODO: Encrypt the data before storing it
-        self.feed_token_encrypted = value
+    # Optional: Add relationship to User model
+    user = relationship("User", back_populates="angelone_credentials")

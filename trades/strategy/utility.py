@@ -1,3 +1,4 @@
+import math
 import os, csv
 import aiosmtplib
 from fastapi import Depends
@@ -82,3 +83,18 @@ async def send_email_async(subject, message, sender, receiver, csv_file):
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
+    
+
+
+def paginate_query(queryset, page: int = 1, limit: int = 10):
+    total = queryset.count()
+    skip = (page - 1) * limit
+    results = queryset.offset(skip).limit(limit).all()
+    total_pages = math.ceil(total / limit) if limit else 1
+    return {
+        "total": total,
+        "pages": total_pages,
+        "current_page": page,
+        "per_page": limit,
+        "data": results
+    }

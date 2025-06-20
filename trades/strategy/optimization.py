@@ -16,7 +16,7 @@ import time
 import fastapi
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 import pyotp
 import requests
 from SmartApi.smartConnect import SmartConnect
@@ -27,6 +27,13 @@ from config.database.config import SessionLocal
 from trades.models import TradeDetails
 from trades.schema import StartStrategySchema
 from trades.strategy.utility import place_order_mail, save_order, save_strategy
+
+
+from config.database.config import get_db
+from sqlalchemy.orm import Session
+from middlewares.auth_middleware import verify_token
+from users.models import User, AngelOneCredential
+from trades.managers import get_token_uuid_by_token_value
 
 router = fastapi.APIRouter()
 tasks: Dict[str, asyncio.Task] = {}
@@ -745,7 +752,8 @@ class BaseStrategy:
         extra_args_amount: dict,
         current_profit: float,
         target_profit: float,
-        strategy_id: str
+        strategy_id: str,
+        user_id: str
     ):
         self.instruments = instrument_reader.read_instruments()
         self.data_provider = data_provider
@@ -766,6 +774,7 @@ class BaseStrategy:
         self.target_profit: float = target_profit
         self.token_id: str = ""
         self.strategy_id: str = strategy_id
+        self.user_id: str = user_id or "default_user"
 
         self.last_trade = {
             "symbol": None,
@@ -774,6 +783,54 @@ class BaseStrategy:
             "timestamp": None
         }
 
+    def initialize_db(self):
+        """Initialize database connection"""
+        global db
+        db = SessionLocal()
+        return db
+
+    def save_trade(self, signal_type: str, price: float, token_value: str, user_id: str = None) -> TradeDetails:
+        """Save trade details to database - Non-blocking operation"""
+        db = None
+        try:
+            db = self.initialize_db()
+            
+            # Pass db session to the function
+            token_uuid = get_token_uuid_by_token_value(token_value, db)
+            if not token_uuid:
+                logger.error(f"Cannot save trade: Token UUID not found for token value: {token_value}")
+               
+            
+            new_trade = TradeDetails(
+                user_id=user_id or "default_user",
+                signal=signal_type,
+                price=price,
+                trade_time=datetime.now(),
+                token_id=token_uuid  # Now using the actual UUID
+            )
+            
+            db.add(new_trade)
+            db.commit()
+            db.refresh(new_trade)
+            
+            logger.info(f"✅ Trade saved successfully: {signal_type} at price {price} for token {token_value} (UUID: {token_uuid})")
+            return new_trade
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving trade (non-critical): {e}")
+            if db:
+                try:
+                    db.rollback()
+                except:
+                    pass
+            # Don't raise the exception - let trading continue
+           
+        finally:
+            if db:
+                try:
+                    db.close()
+                except:
+                    pass
     
     async def fetch_ltp_data(self):
         try:
@@ -842,8 +899,6 @@ class BaseStrategy:
                     )
 
                     if signal == Signal.BUY:
-                        
-
                         for instrument in self.instruments:
                             if instrument.symbol == index:
                                 self.token_id = instrument.token
@@ -888,15 +943,10 @@ class BaseStrategy:
                         
                         if self.trading_quantity == 0:
                             logger.warning(f"Trading quantity is zero for {index}. Stopping strategy {self.strategy_id}.")
-                            
-                            # Set stop event to terminate all strategy tasks
                             self.stop_event.set()
-                            
-                            # No API call - Just terminate the strategy internally
                             logger.info(f"Terminating strategy {self.strategy_id} due to zero quantity")
-                            
-                            # Break out of the process_data loop
                             return
+                        
                         print(self.parameters[index], "self.parameters[index]")
                         self.indicator.order_id, trade_book_full_response = await async_return(
                         self.data_provider.place_order(index_info[0], index_info[1], "BUY", "MARKET",
@@ -917,6 +967,19 @@ class BaseStrategy:
                         # If order was successful, continue with normal flow
                         self.indicator.price = float(price_returned)
                         self.buying_price = float(price_returned)
+
+                         # Save BUY trade to database (non-blocking)
+                        saved_trade = self.save_trade(
+                            signal_type="BUY",
+                            price=self.buying_price,
+                            token_value=self.token_id,  # Pass token value, not token_id
+                            user_id=self.user_id   # Replace with actual user_id if available
+                        )
+                        if saved_trade:
+                            logger.info(f"✅ BUY trade saved with ID: {saved_trade.id}")
+                        else:
+                            logger.warning("⚠️ BUY trade save failed, but continuing trading...")
+
                         self.last_trade = {
                             "symbol": index,
                             "buy_price": self.buying_price,
@@ -952,6 +1015,22 @@ class BaseStrategy:
                             self.data_provider.place_order(index_info[0], index_info[1], "SELL", "MARKET",
                                                            price_returned, str(self.trading_quantity)))
                         sell_price = float(price_returned)
+                        if trade_book_full_response.get("status") != "rejected":
+                            # Save SELL trade to database (non-blocking)
+                            saved_trade = self.save_trade(
+                                signal_type="SELL",
+                                price=sell_price,
+                                token_value=self.token_id,  # Pass token value, not token_id
+                                user_id=self.user_id   # Replace with actual user_id if available
+                            )
+                            if saved_trade:
+                                logger.info(f"✅ SELL trade saved with ID: {saved_trade.id}")
+                            else:
+                                logger.warning("⚠️ SELL trade save failed, but continuing trading...")
+                        else:
+                            logger.warning(f"Sell order was rejected: {trade_book_full_response.get('text')}")
+                            continue
+
                         if self.last_trade["symbol"] == index and float(self.last_trade["buy_price"]) > 0:
                             buy_price = float(self.last_trade["buy_price"])
                             quantity = int(self.last_trade["quantity"])
@@ -1104,7 +1183,7 @@ def connectFeed(sws, token_list=None):
 
 
 @router.post("/start_strategy")
-async def start_strategy(strategy_params: StartStrategySchema):
+async def start_strategy(strategy_params: StartStrategySchema, db: Session = Depends(get_db)):
     try:
         print("STRATEGY PARAMS", strategy_params)
         current_profit = -1
@@ -1124,10 +1203,19 @@ async def start_strategy(strategy_params: StartStrategySchema):
             raise HTTPException(status_code=400, detail="Strategy already running")
 
         try:
+            # user_id = user_payload.get('id')
+            credentials = db.query(AngelOneCredential).filter_by(user_id=strategy_params.user_id).first()
+            print(credentials, "credentials")
+            if not credentials:
+                raise Exception("AngelOne credentials not found for this user")
             # Generate session tokens
-            session_response = smart.generateSession(clientCode=CLIENT_CODE, password=PASSWORD, totp=pyotp.TOTP(TOKEN_CODE).now())
+            client_code = credentials.client_code
+            password = credentials.password
+            totp = credentials.totp_secret
+            print(client_code, password, totp, "cred")
+            session_response = smart.generateSession(clientCode=client_code, password=password, totp=pyotp.TOTP(totp).now())
             ltp_smart.generateSession(
-                clientCode=LTP_CLIENT_CODE, password=LTP_PASSWORD, totp=pyotp.TOTP(LTP_TOKEN_CODE).now()
+                clientCode=client_code, password=password, totp=pyotp.TOTP(totp).now()
             )
             
             # Get tokens from session for WebSocket
@@ -1184,6 +1272,7 @@ async def start_strategy(strategy_params: StartStrategySchema):
             current_profit,
             target_profit,
             strategy_id,
+            strategy_params.user_id
         )
         
         # Increase interval to avoid rate limiting
