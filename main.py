@@ -123,6 +123,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from trades.strategy.optimization import SmartApiDataProvider
+
 from SmartApi import SmartConnect
 import trades.models as trades_models
 import users.models as user_models
@@ -142,6 +143,7 @@ from core.redis import PubSubClient
 from trades import route as trade_route
 from trades.stream import WSApp
 from users import route as user_route
+from customStrategy import routes as custom_strategy_routes
 from trades.strategy import optimization as strategy_route
 
 # Database initialization
@@ -171,6 +173,7 @@ app = FastAPI(
 app.include_router(user_route.router, prefix="/users", tags=["Users"])
 app.include_router(trade_route.router, prefix="/tokens", tags=["Tokens"])
 app.include_router(strategy_route.router, prefix="/strategy", tags=["Strategy"])
+app.include_router(custom_strategy_routes.router, prefix="/custome-strategy", tags=["CustomStrategy"])
 
 
 # Models for the API
