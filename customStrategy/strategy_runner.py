@@ -197,18 +197,39 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
             if evaluate_group("pre_buy"):
                 buy_cond = next((c for c in conditions if c["type"] == "buy"), None)
                 if buy_cond:
+                    # if buy_cond["comparison_type"] == "spot":
+                    #     entry_price = current_close
+                    #     # actal buy
+                    #     lot_size = int(token_model.lotsize)
+                    #     print(lot_size, "lotsize")
+                    #     max_lots_affordable = int(trade_amount // (entry_price * lot_size))
+                    #     if max_lots_affordable < 1:
+                    #         print(f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f}")
+                    #         stop_strategy_flag(strategy_id)
+                    #         break  # Stop the loop
+                    #     lots_to_trade = min(quantity, max_lots_affordable)
+                    #     actual_qty = lots_to_trade * lot_size
+                    #     print(f"🛒 Executing BUY for {lots_to_trade} lot(s) → Qty: {actual_qty}")
                     if buy_cond["comparison_type"] == "spot":
                         entry_price = current_close
-                        # actal buy
+                        print(f"📈 Buy condition matched: SPOT | Entry price (LTP): ₹{entry_price:.2f}")
+
                         lot_size = int(token_model.lotsize)
+                        print(f"📦 Lot size from token model: {lot_size}")
+
                         max_lots_affordable = int(trade_amount // (entry_price * lot_size))
+                        print(f"💰 Max lots affordable with ₹{trade_amount}: {max_lots_affordable} lot(s)")
+
                         if max_lots_affordable < 1:
-                            print(f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f}")
+                            print(f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f} (Trade Amt: ₹{trade_amount})")
                             stop_strategy_flag(strategy_id)
                             break  # Stop the loop
+
                         lots_to_trade = min(quantity, max_lots_affordable)
                         actual_qty = lots_to_trade * lot_size
-                        print(f"🛒 Executing BUY for {lots_to_trade} lot(s) → Qty: {actual_qty}")
+
+                        print(f"🛒 Executing BUY → Requested Qty: {quantity} lot(s) | Executing: {lots_to_trade} lot(s) → Total Qty: {actual_qty}")
+
                         # order_id, order_details = service.place_order(
                         #     symbol=token_model["symbol"],
                         #     token=token_model["token"],
@@ -316,9 +337,11 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                     #     continue
                     pnl = (current_close - entry_price) * actual_qty
                     total_profit += pnl
-                    print(f"\n🔴 SELL executed at ₹{current_close:.2f} → PnL: ₹{pnl:.2f} → Total PnL: ₹{total_profit:.2f}")
+                    status = "🟢 Profit" if pnl >= 0 else "🔻 Loss"
+                    print(f"\n🔴 SELL executed at ₹{current_close:.2f} → {status}: ₹{abs(pnl):.2f} → Total PnL: ₹{total_profit:.2f}")
                     signal = "buy"
                     save_trade(signal_type="SELL",price=current_close,token_value=token_model.token,user_id=user_data["user_id"])
+
 
                 else:
                     print("⏳ No sell condition met (target/SL/sell). Waiting...")
