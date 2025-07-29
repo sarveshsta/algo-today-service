@@ -2,7 +2,7 @@ import time
 import os
 import operator
 from .strategy_state import is_running, stop_strategy_flag
-from .utils import get_candle_data
+from .utils import get_candle_data, save_trade
 import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
@@ -58,25 +58,45 @@ def evaluate_condition(df, condition, ltp=None):
             return result
 
         # --- OHLC vs LTP ---
+        # elif condition["comparison_type"] == "ohlc_vs_ltp":
+        #     if ltp is None:
+        #         raise ValueError("LTP is required for 'ohlc_vs_ltp' comparison type.")
+        #     left = df[condition["left_ohlc"]].iloc[-condition.get("left_candle_offset", 1)] * condition.get("left_multiplier", 1)
+        #     result = op(left, ltp)
+        #     print(f"\n📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} LTP")
+        #     print(f"🔎 Values: {left:.2f} {condition['operator']} {ltp:.2f} → {'✅ True' if result else '❌ False'}")
+        #     return result
         elif condition["comparison_type"] == "ohlc_vs_ltp":
             if ltp is None:
                 raise ValueError("LTP is required for 'ohlc_vs_ltp' comparison type.")
-            left = df[condition["left_ohlc"]].iloc[-condition.get("left_candle_offset", 1)] * condition.get("left_multiplier", 1)
+
+            candle_offset = condition.get("left_candle_offset", 1)
+            multiplier = condition.get("left_multiplier", 1)
+            ohlc_col = condition["left_ohlc"]
+
+            # Calculate actual value
+            raw_value = df[ohlc_col].iloc[-candle_offset]
+            left = raw_value * multiplier
             result = op(left, ltp)
-            print(f"\n📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} LTP")
-            print(f"🔎 Values: {left:.2f} {condition['operator']} {ltp:.2f} → {'✅ True' if result else '❌ False'}")
+
+            # Detailed logging
+            print(f"\n📌 Condition: {ohlc_col.upper()}[{candle_offset}] * {multiplier} {condition['operator']} LTP")
+            print(f"🔎 Values: ({raw_value:.2f} * {multiplier}) = {left:.2f} {condition['operator']} {ltp:.2f} → {'✅ True' if result else '❌ False'}")
+
             return result
+
 
     except Exception as e:
         print(f"\n❌ Error evaluating condition: {condition} → {e}")
         return False
 
 
-def strategy_worker(payload, ltp_provider):
+def strategy_worker(payload, ltp_provider, credentials, service, user_data):
     strategy_id = payload["strategy_id"]
     symbol = f"{payload['index']}{payload['expiry']}{payload['strike_price']}{payload['option_type']}"
     interval = payload["candle_duration"]
     quantity = payload["quantity"]
+    trade_amount = payload['trade_amount']
     target_profit = payload["target_profit"]
     signal = "buy"
     entry_price = 0
@@ -85,11 +105,13 @@ def strategy_worker(payload, ltp_provider):
 
     instrument_reader = OpenApiInstrumentReader(os.getenv("NFO_DATA_URL"), [symbol])
     instruments = instrument_reader.read_instruments()
+    print(instruments, "instruments")
     if not instruments:
         print(f"❌ No instrument found for symbol: {symbol}")
         stop_strategy_flag(strategy_id)
         return
     token_model = instruments[0]
+    print(token_model.__dict__, "model_object")
 
     print(f"\n🚀 Starting strategy [{strategy_id}]")
     print(f"🧾 Symbol: {symbol}")
@@ -98,7 +120,7 @@ def strategy_worker(payload, ltp_provider):
 
     while is_running(strategy_id):
         print(f"\n📈 Fetching candle data for: {symbol}")
-        df = get_candle_data(token=[symbol], exchange="NFO", interval=interval, days=1)
+        df = get_candle_data(token=[symbol], exchange="NFO", interval=interval, days=1, credentials=credentials)
 
         if df.empty:
             print("⚠️ Candle data is empty. Retrying in 5 seconds...")
@@ -178,12 +200,57 @@ def strategy_worker(payload, ltp_provider):
                     if buy_cond["comparison_type"] == "spot":
                         entry_price = current_close
                         # actal buy
+                        lot_size = int(token_model.lotsize)
+                        max_lots_affordable = int(trade_amount // (entry_price * lot_size))
+                        if max_lots_affordable < 1:
+                            print(f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f}")
+                            stop_strategy_flag(strategy_id)
+                            break  # Stop the loop
+                        lots_to_trade = min(quantity, max_lots_affordable)
+                        actual_qty = lots_to_trade * lot_size
+                        print(f"🛒 Executing BUY for {lots_to_trade} lot(s) → Qty: {actual_qty}")
+                        # order_id, order_details = service.place_order(
+                        #     symbol=token_model["symbol"],
+                        #     token=token_model["token"],
+                        #     transaction="BUY",
+                        #     ordertype="MARKET",
+                        #     price=entry_price,
+                        #     quantity=actual_qty
+                        # )
+                        # if order_details.get("status") == "rejected":
+                        #     print(f"Buy order was rejected: {order_details.get('text')}")
+                        #     signal = "buy"
+                        #     continue
+
                         signal = "sell"
+                        save_trade(signal_type="BUY",price=entry_price,token_value=token_model.token,user_id=user_data["user_id"])
                         print(f"\n🟢 BUY signal (SPOT) executed at ₹{entry_price:.2f}")
                     elif buy_cond["comparison_type"] == "ohlc_vs_ltp":
                         if evaluate_condition(df, buy_cond, ltp=current_close):
                             entry_price = current_close
+                            lot_size = int(token_model.lotsize)
+                            max_lots_affordable = int(trade_amount // (entry_price * lot_size))
+                            if max_lots_affordable < 1:
+                                print(f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f}")
+                                stop_strategy_flag(strategy_id)
+                                break  
+                            lots_to_trade = min(quantity, max_lots_affordable)
+                            actual_qty = lots_to_trade * lot_size
+                            print(f"🛒 Executing BUY for {lots_to_trade} lot(s) → Qty: {actual_qty}")
+                            # order_id, order_details = service.place_order(
+                            #     symbol=token_model["symbol"],
+                            #     token=token_model["token"],
+                            #     transaction="BUY",
+                            #     ordertype="MARKET",
+                            #     price=entry_price,
+                            #     quantity=actual_qty
+                            # )
+                            # if order_details.get("status") == "rejected":
+                            #     print(f"Buy order was rejected: {order_details.get('text')}")
+                            #     signal = "buy"
+                            #     continue
                             signal = "sell"
+                            save_trade(signal_type="BUY",price=entry_price,token_value=token_model.token,user_id=user_data["user_id"])
                             print(f"\n🟢 BUY signal (OHLC vs LTP) executed at ₹{entry_price:.2f}")
                         else:
                             print("⏳ Buy condition (ohlc_vs_ltp) not met. Waiting...")
@@ -225,15 +292,34 @@ def strategy_worker(payload, ltp_provider):
                         print(f"🛑 Stop-loss hit at ₹{current_close:.2f} (SL: ₹{sl_price:.2f})")
 
                 if sell_cond:
-                    sell_match = evaluate_condition(df, sell_cond, ltp=current_close)
+                    if sell_cond["comparison_type"] == "spot":
+                        sell_match = True
+                        print(f"\n🟢 SELL signal (SPOT) executed at ₹{current_close:.2f}")
+                    elif sell_cond["comparison_type"] == "ohlc_vs_ltp":
+                        sell_match = evaluate_condition(df, sell_cond, ltp=current_close)
                     if sell_match:
-                        print("📉 SELL condition met.")
+                        print(f"\n🟢 SELL signal (ohlc_vs_ltp) executed at ₹{current_close:.2f}")
 
                 if target_hit or sl_hit or sell_match:
-                    pnl = (current_close - entry_price) * quantity
+                    print(f"💼 Executing SELL for Qty: {actual_qty}")
+                    # order_id, order_details = service.place_order(
+                    #     symbol=token_model["symbol"],
+                    #     token=token_model["token"],
+                    #     transaction="SELL",
+                    #     ordertype="MARKET",
+                    #     price=current_close,
+                    #     quantity=actual_qty
+                    # )
+                    # if order_details.get("status") == "rejected":
+                    #     print(f"❌ Sell order was rejected: {order_details.get('text')}")
+                    #     signal = "sell"
+                    #     continue
+                    pnl = (current_close - entry_price) * actual_qty
                     total_profit += pnl
                     print(f"\n🔴 SELL executed at ₹{current_close:.2f} → PnL: ₹{pnl:.2f} → Total PnL: ₹{total_profit:.2f}")
                     signal = "buy"
+                    save_trade(signal_type="SELL",price=current_close,token_value=token_model.token,user_id=user_data["user_id"])
+
                 else:
                     print("⏳ No sell condition met (target/SL/sell). Waiting...")
             else:

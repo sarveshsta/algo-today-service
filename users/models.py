@@ -30,6 +30,7 @@ class AngelOneCredential(Base):
     client_code = Column(String(50), nullable=False)
     password = Column(Text, nullable=False)
     totp_secret = Column(Text, nullable=False)
+    api_key = Column(String(50), nullable=True)
     jwt_token = Column(Text, nullable=True)
     feed_token = Column(Text, nullable=True)
     token_expiry = Column(DateTime, nullable=True)
