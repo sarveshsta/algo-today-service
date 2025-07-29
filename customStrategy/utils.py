@@ -43,6 +43,31 @@ def get_smartapi_connection(credentials: Dict[str, str]) -> SmartConnect:
 
 
 # Fetch candle data
+# def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUTE", days: int = 1, credentials: Dict[str, str] = None):
+#     try:
+#         smartapi = get_smartapi_connection(credentials)
+#         ist = pytz.timezone('Asia/Kolkata')
+#         to_date = datetime.now(ist)
+#         from_date = to_date - timedelta(days=days)
+
+#         params = {
+#             "exchange": EXCHANGE_MAP[exchange],
+#             "symboltoken": get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), token)[0]['token'],
+#             "interval": interval, 
+#             "fromdate": from_date.strftime("%Y-%m-%d %H:%M"),
+#             "todate": to_date.strftime("%Y-%m-%d %H:%M")
+#         }
+
+#         response = smartapi.getCandleData(params)
+#         candles = response['data']
+#         df = pd.DataFrame(candles, columns=["datetime", "open", "high", "low", "close", "volume"])
+#         df["datetime"] = pd.to_datetime(df["datetime"])
+#         return df
+
+#     except Exception as e:
+#         print("Error fetching candles:", str(e))
+#         return pd.DataFrame()
+
 def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUTE", days: int = 1, credentials: Dict[str, str] = None):
     try:
         smartapi = get_smartapi_connection(credentials)
@@ -50,16 +75,31 @@ def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUT
         to_date = datetime.now(ist)
         from_date = to_date - timedelta(days=days)
 
+        print("🕒 From:", from_date, "To:", to_date)
+
+        instruments = get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), token)
+        print("🎯 Tokens fetched:", instruments)
+
+        if not instruments:
+            raise ValueError("❌ No instruments returned. Check NFO_DATA_URL or token match.")
+
         params = {
             "exchange": EXCHANGE_MAP[exchange],
-            "symboltoken": get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), token)[0]['token'],
+            "symboltoken": instruments[0]['token'],
             "interval": interval, 
             "fromdate": from_date.strftime("%Y-%m-%d %H:%M"),
             "todate": to_date.strftime("%Y-%m-%d %H:%M")
         }
 
+        print("📤 Request Params:", params)
+
         response = smartapi.getCandleData(params)
-        candles = response['data']
+        print("📥 Raw response:", response)
+
+        candles = response.get('data')
+        if not candles:
+            raise ValueError("❗ Empty candle data received")
+
         df = pd.DataFrame(candles, columns=["datetime", "open", "high", "low", "close", "volume"])
         df["datetime"] = pd.to_datetime(df["datetime"])
         return df
@@ -67,7 +107,6 @@ def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUT
     except Exception as e:
         print("Error fetching candles:", str(e))
         return pd.DataFrame()
-
 
 
 
