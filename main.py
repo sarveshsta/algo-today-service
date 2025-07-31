@@ -145,6 +145,8 @@ from trades.stream import WSApp
 from users import route as user_route
 from customStrategy import routes as custom_strategy_routes
 from trades.strategy import optimization as strategy_route
+from fastapi import WebSocket, WebSocketDisconnect
+from log_stream import register_client, unregister_client
 
 # Database initialization
 user_models.Base.metadata.create_all(bind=engine)
@@ -279,6 +281,15 @@ async def read_root():
 
 # Run server
 PORT: int = 5000
+
+@app.websocket("/ws/logs")
+async def log_stream_socket(websocket: WebSocket):
+    await register_client(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # Keeps the connection alive
+    except WebSocketDisconnect:
+        unregister_client(websocket)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")

@@ -17,6 +17,7 @@ from middlewares.auth_middleware import verify_token
 from config.database.config import get_db
 from .utils import get_user_credentials,SmartAPIService, get_smartapi_connection
 from SmartApi.smartConnect import SmartConnect
+from log_stream import send_log
 
 router = APIRouter()
 
@@ -132,6 +133,7 @@ async def stop_strategy(strategy_id: str):
 @router.post("/strategy-status")
 async def strategy_status(strategy_id: str):
     status = is_running(strategy_id)
+    await send_log("hello bhai")
     message = (
         f"Strategy {strategy_id} is currently running."
         if status else

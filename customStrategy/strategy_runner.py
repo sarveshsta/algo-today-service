@@ -1,4 +1,5 @@
 import time
+import asyncio
 import os
 import operator
 from .strategy_state import is_running, stop_strategy_flag
@@ -7,6 +8,7 @@ import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
 from trades.strategy.optimization import OpenApiInstrumentReader
+from log_stream import send_log
 
 def evaluate_condition(df, condition, ltp=None):
     """Evaluates a single StrategyCondition dictionary against the DataFrame."""
@@ -129,6 +131,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
 
         # Apply indicators
         print("🛠️ Applying indicators...")
+        asyncio.run(send_log("🛠️ Applying indicators..."))
         used_indicators = set()
         for cond in conditions:
             for ind_key in ["left_indicator", "right_indicator"]:
@@ -145,6 +148,8 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
         df.dropna(inplace=True)
         current_close = ltp_provider.fetch_ltp_data(token_model)
         print(f"\n📊 Current Signal: {signal.upper()} | LTP: ₹{current_close:.2f} | Total PnL: ₹{total_profit:.2f}")
+        log_message = f"\n📊 Current Signal: {signal.upper()} | LTP: ₹{current_close:.2f} | Total PnL: ₹{total_profit:.2f}"
+        asyncio.run(send_log(log_message))
 
         # Evaluate group of conditions
         def evaluate_group(cond_type):
