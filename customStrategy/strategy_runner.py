@@ -3,7 +3,7 @@ import asyncio
 import os
 import operator
 from .strategy_state import is_running, stop_strategy_flag
-from .utils import get_candle_data, save_trade
+from .utils import get_candle_data, save_trade, save_trade_record
 import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
@@ -532,7 +532,21 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                         #     continue
 
                         signal = "sell"
-                        save_trade(signal_type="BUY", price=entry_price, token_value=token_model.token, user_id=user_data["user_id"])
+                        save_trade(signal_type="BUY",
+                                   quantity=actual_qty, 
+                                   symbol=symbol,
+                                   price=entry_price, 
+                                   token_value=token_model.token, 
+                                   user_id=user_data["user_id"])
+                        save_trade_record(
+                                          symbol=symbol, 
+                                          quantity=actual_qty, 
+                                          trade_type="BUY",
+                                          user_id=user_data["user_id"],
+                                          ltp=current_close,
+                                          pnl=total_profit,
+                                          order_type="NRML",
+                                          strategy_id=strategy_id)
                         asyncio.run(send_log(f"🟢 BUY executed at ₹{entry_price:.2f}"))
 
                     elif buy_cond["comparison_type"] == "ohlc_vs_ltp":
@@ -563,7 +577,21 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                             #     signal = "buy"
                             #     continue
                             signal = "sell"
-                            save_trade(signal_type="BUY", price=entry_price, token_value=token_model.token, user_id=user_data["user_id"])
+                            save_trade(signal_type="BUY", 
+                                        quantity=actual_qty, 
+                                        symbol=symbol,
+                                       price=entry_price, 
+                                       token_value=token_model.token, 
+                                       user_id=user_data["user_id"])
+                            save_trade_record(
+                                          symbol=symbol, 
+                                          quantity=actual_qty, 
+                                          trade_type="BUY",
+                                          user_id=user_data["user_id"],
+                                          ltp=current_close,
+                                          pnl=total_profit,
+                                          order_type="NRML",
+                                          strategy_id=strategy_id)
                             asyncio.run(send_log(f"🟢 BUY (ohlc_vs_ltp) executed at ₹{entry_price:.2f}"))
                         else:
                             asyncio.run(send_log("⏳ Buy condition (ohlc_vs_ltp) not met. Waiting..."))
@@ -633,7 +661,21 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                     print(msg)
                     asyncio.run(send_log(msg))
                     signal = "buy"
-                    save_trade(signal_type="SELL", price=current_close, token_value=token_model.token, user_id=user_data["user_id"])
+                    save_trade(signal_type="SELL", 
+                                quantity=actual_qty, 
+                                symbol=symbol,
+                               price=current_close, 
+                               token_value=token_model.token, 
+                               user_id=user_data["user_id"])
+                    save_trade_record(
+                                    symbol=symbol, 
+                                    quantity=actual_qty, 
+                                    trade_type="SELL",
+                                    user_id=user_data["user_id"],
+                                    ltp=current_close,
+                                    pnl=total_profit,
+                                    order_type="NRML",
+                                    strategy_id=strategy_id)
                 else:
                     asyncio.run(send_log("⏳ No sell condition met (target/SL/sell). Waiting..."))
             else:

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from middlewares.auth_middleware import verify_token
 from config.database.config import get_db
 from trades.managers import *
-from trades.models import StrategyValue, TradeDetails, TradingData
+from trades.models import StrategyValue, TradeDetails, TradingData, Trade
 from trades.schema import (
     ExpirySchema,
     Order,
@@ -16,7 +16,8 @@ from trades.schema import (
     TradingDataCreate,
     TradingDataResponse,
     TradingDataUpdate,
-    TradeDetailsSchema
+    TradeDetailsSchema,
+    TradeSchema
 )
 
 router = fastapi.APIRouter()
@@ -28,11 +29,7 @@ async def read_tokens(skip: int = 0, limit: int = 100, db: Session = Depends(get
     return tokens
 
 
-# @router.get("/", response_model=PaginatedTokenResponse)
-# async def read_tokens(page: int = Query(1, ge=1),
-#     limit: int = Query(100, ge=1),
-#     db: Session = Depends(get_db)):
-#     return get_tokens(db=db, page=page, limit=limit)
+
 
 @router.delete("/")
 def delete_tokens(db: Session = Depends(get_db)):
@@ -47,17 +44,40 @@ def create_index_tokens(db: Session = Depends(get_db)):
 
 
 @router.get("/trades_details/", response_model=List[TradeDetailsSchema])
-async def get_trade_details(db: Session = Depends(get_db)):
-    trades = db.query(TradeDetails)\
-        .options(joinedload(TradeDetails.token))\
-        .order_by(desc(TradeDetails.trade_time))\
+async def get_trade_details(
+    db: Session = Depends(get_db),
+    user_data: dict = Depends(verify_token)
+):
+    user_id = user_data['user_id']
+    print(user_id, "user_data")  # Log user_id
+
+    trades = db.query(TradeDetails) \
+        .filter(TradeDetails.user_id == user_id) \
+        .order_by(desc(TradeDetails.trade_time)) \
         .all()
 
     if not trades:
-        raise HTTPException(status_code=404, detail="No trades found")
+        raise HTTPException(status_code=404, detail="No trades found for the user")
 
     return trades
 
+@router.get("/trades/", response_model=List[TradeSchema])
+async def get_trade_details(
+    db: Session = Depends(get_db),
+    user_data: dict = Depends(verify_token)
+):
+    user_id = user_data['user_id']
+    print(user_id, "user_data") 
+
+    trades = db.query(Trade) \
+        .filter(Trade.user_id == user_id) \
+        .order_by(desc(Trade.created_at)) \
+        .all()
+
+    if not trades:
+        raise HTTPException(status_code=404, detail="No trades found for the user")
+
+    return trades
 
 
 @router.get("/{index}", response_model=List[ExpirySchema])

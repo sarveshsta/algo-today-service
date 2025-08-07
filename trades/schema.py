@@ -85,23 +85,30 @@ class TradeDetailsSchema(BaseModel):
     signal: str
     price: float
     trade_time: datetime
-    token: TokenSchema
+    quantity: int 
+    name : str
+    symbol : str
+    strike_price: float 
 
     class Config:
         orm_mode = True
 
+class TradeSchema(BaseModel):
+    id: UUID
+    user_id: UUID
+    strategy_id: UUID    
+    symbol: str
+    quantity: int
+    trade_type: str
+    average_price: float | None
+    ltp: float
+    pnl: float
+    order_type: str
+    created_at: datetime
+  
 
-# class TradeDetailsSchema(BaseModel):
-#     id: int
-#     user_id: str
-#     signal: str
-#     price: float
-#     trade_time: datetime  # You can use datetime and let FastAPI format it
-#     token_id: str
-
-#     class Config:
-#         orm_mode = True
-
+    class Config:
+        orm_mode = True
 
 class ExpirySchema(BaseModel):
     token: str

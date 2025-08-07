@@ -7,7 +7,7 @@ from time import sleep, time
 from typing import List, Dict
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from trades.models import TradeDetails
+from trades.models import TradeDetails, Trade
 from datetime import datetime, timedelta
 from SmartApi.smartConnect import SmartConnect
 from config.database.config import SessionLocal
@@ -234,14 +234,14 @@ class SmartAPIService:
             raise ValueError(f"Sell order failed: {e}")
 
 
-def save_trade(signal_type: str, price: float, token_value: str, user_id: str = None) -> TradeDetails:
+def save_trade(signal_type: str, quantity:int, symbol: str, price: float, token_value: str, user_id: str = None) -> TradeDetails:
     """Save trade details to database - Non-blocking operation"""
     db = None
     try:
         db = SessionLocal()
         
-        token_uuid = get_token_uuid_by_token_value(token_value, db)
-        if not token_uuid:
+        token_record = get_token_uuid_by_token_value(token_value, db)
+        if not token_record:
             logger.error(f"Cannot save trade: Token UUID not found for token value: {token_value}")
             return None
 
@@ -250,14 +250,63 @@ def save_trade(signal_type: str, price: float, token_value: str, user_id: str = 
             signal=signal_type,
             price=price,
             trade_time=datetime.now(),
-            token_id=token_uuid
+            quantity = quantity,
+            symbol=symbol,
+            name=token_record.name,
+            strike_price=token_record.strike,
         )
         
         db.add(new_trade)
         db.commit()
         db.refresh(new_trade)
         
-        logger.info(f"✅ Trade saved successfully: {signal_type} at price {price} for token {token_value} (UUID: {token_uuid})")
+        logger.info(f"✅ Trade saved successfully: {signal_type} at price {price} for token {token_value} (UUID: {token_record.id})")
+        return new_trade
+
+    except Exception as e:
+        logger.error(f"❌ Error saving trade (non-critical): {e}")
+        if db:
+            try:
+                db.rollback()
+            except:
+                pass
+    finally:
+        if db:
+            try:
+                db.close()
+            except:
+                pass
+
+
+def save_trade_record(
+                      symbol: str, 
+                      quantity:int, 
+                      trade_type:str, 
+                      user_id: str = None,
+                      ltp: float = None,
+                      pnl: float = None,
+                      order_type: str = None, 
+                      strategy_id: str = None) -> TradeDetails:
+    """Save trade details to database - Non-blocking operation"""
+    db = None
+    try:
+        db = SessionLocal()
+        new_trade = Trade(
+            user_id=user_id,
+            symbol=symbol,
+            quantity=quantity,
+            trade_type=trade_type,
+            ltp=ltp,
+            pnl=pnl,
+            order_type=order_type,
+            strategy_id=strategy_id,
+        )
+        
+        db.add(new_trade)
+        db.commit()
+        db.refresh(new_trade)
+        
+        logger.info(f"✅ Trade saved successfully: {trade_type} at price {ltp} for symbol {symbol}")
         return new_trade
 
     except Exception as e:

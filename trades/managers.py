@@ -96,7 +96,7 @@ def get_token_uuid_by_token_value(token_value: str, db: Session = Depends(get_db
             token_record = db.query(TokenModel).filter(TokenModel.token == token_value).first()
             
             if token_record:
-                return str(token_record.id)
+                return token_record
             else:
                 return None
               

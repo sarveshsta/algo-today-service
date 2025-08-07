@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, Date, DateTime, Float, ForeignKey, Integer, String,Enum, Boolean, Text
 from sqlalchemy.orm import declarative_base, relationship
 from config.database.config import Base
 from core.mixins import CoreBaseModel
@@ -43,12 +43,51 @@ class TradeDetails(Base):
     signal = Column(String, nullable=False)
     price = Column(Float, nullable=False)
     trade_time = Column(DateTime, default=datetime.now)
+    quantity = Column(Integer, nullable=True)
+    name = Column(String, nullable=True)
+    symbol = Column(String, nullable=True)
+    strike_price = Column(Float, nullable=True)
 
-    token_id = Column(UUID(as_uuid=True), ForeignKey("algo_app_token.id"), nullable=False)
-
-    token = relationship("TokenModel", backref="trade_details")
 
 
+class Strategy(Base):
+    __tablename__ = "strategy_strategy"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_deleted = Column(Boolean, default=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("algo_app_user.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Optional: Relationship to User model
+    user = relationship("User", backref="strategies")
+
+    def __repr__(self):
+        return f"<Strategy(name={self.name})>"
+class Trade(Base):
+    __tablename__ = "strategy_trade"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("algo_app_user.id"), nullable=True)  # Replace `auth_user` with your actual user table
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("strategy_strategy.id"), nullable=True)
+    symbol = Column(String(100), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    trade_type = Column(Enum("BUY", "SELL", name="trade_type_enum"), nullable=False)
+    average_price = Column(Float, nullable=True)
+    ltp = Column(Float, nullable=False)
+    pnl = Column(Float, nullable=False)
+    order_type = Column(Enum("NRML", "MIS", name="order_type_enum"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships (optional, if you want ORM-based navigation)
+    user = relationship("User", backref="trades")  # Only if you have a User model defined
+    strategy = relationship("Strategy", backref="trades")  # Only if Strategy is a model
+
+    def __repr__(self):
+        return f"<Trade(symbol='{self.symbol}', trade_type='{self.trade_type}')>"
 
 
 class Order(Base):
