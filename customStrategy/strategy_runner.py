@@ -8,7 +8,7 @@ import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
 from trades.strategy.optimization import OpenApiInstrumentReader
-from log_stream import send_log, broadcast_trade_saved
+from log_stream import send_log, broadcast_trade_saved, broadcast_strategy_status
 
 def evaluate_condition(df, condition, ltp=None):
     """Evaluates a single StrategyCondition dictionary against the DataFrame."""
@@ -398,6 +398,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
     asyncio.run(send_log(start_msg))
 
     while is_running(strategy_id):
+        asyncio.run(broadcast_strategy_status({"strategy_id": strategy_id, "is_running":True}))
         msg = f"\n📈 Fetching candle data for: {symbol}"
         print(msg)
         asyncio.run(send_log(msg))

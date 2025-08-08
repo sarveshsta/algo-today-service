@@ -24,7 +24,20 @@ async def broadcast_trade_saved(trade_data: dict):
             disconnected_clients.append(client)
     for client in disconnected_clients:
         unregister_client(client)
-        
+
+async def broadcast_strategy_status(strategy_status: dict):
+    message = {
+        "key": "STRATEGY_RUNNING",  # Frontend will use this key to reload trades
+        "payload": strategy_status
+    }
+    disconnected_clients = []
+    for client in connected_clients:
+        try:
+            await client.send_json(message)
+        except:
+            disconnected_clients.append(client)
+    for client in disconnected_clients:
+        unregister_client(client)
 
 async def send_log(message: str):
     for client in connected_clients:
