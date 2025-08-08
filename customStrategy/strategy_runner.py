@@ -8,7 +8,7 @@ import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
 from trades.strategy.optimization import OpenApiInstrumentReader
-from log_stream import send_log
+from log_stream import send_log, broadcast_trade_saved
 
 def evaluate_condition(df, condition, ltp=None):
     """Evaluates a single StrategyCondition dictionary against the DataFrame."""
@@ -548,7 +548,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                           order_type="NRML",
                                           strategy_id=strategy_id)
                         asyncio.run(send_log(f"🟢 BUY executed at ₹{entry_price:.2f}"))
-
+                        asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "BUY"}))
                     elif buy_cond["comparison_type"] == "ohlc_vs_ltp":
                         if evaluate_condition(df, buy_cond, ltp=current_close):
                             entry_price = current_close
@@ -593,6 +593,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                           order_type="NRML",
                                           strategy_id=strategy_id)
                             asyncio.run(send_log(f"🟢 BUY (ohlc_vs_ltp) executed at ₹{entry_price:.2f}"))
+                            asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "BUY"}))
                         else:
                             asyncio.run(send_log("⏳ Buy condition (ohlc_vs_ltp) not met. Waiting..."))
                     else:
@@ -676,6 +677,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                     pnl=total_profit,
                                     order_type="NRML",
                                     strategy_id=strategy_id)
+                    asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "SELL"}))
                 else:
                     asyncio.run(send_log("⏳ No sell condition met (target/SL/sell). Waiting..."))
             else:
