@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from middlewares.auth_middleware import verify_token
 from config.database.config import get_db
 from trades.managers import *
-from trades.models import StrategyValue, TradeDetails, TradingData, Trade
+from trades.models import StrategyValue, TradeDetails, TradingData, Trade, StrategyPayload
 from trades.schema import (
     ExpirySchema,
     Order,
@@ -17,9 +17,10 @@ from trades.schema import (
     TradingDataResponse,
     TradingDataUpdate,
     TradeDetailsSchema,
-    TradeSchema
+    TradeSchema,
+    StrategyPayloadSchema
 )
-
+from uuid import UUID
 router = fastapi.APIRouter()
 
 
@@ -160,21 +161,22 @@ def update_trading_data(data_id: int, trading_data: TradingDataUpdate, db: Sessi
     db.refresh(db_trading_data)
     return JSONResponse({"Strategy constant updated successfully": True})
 
+@router.get("/get_strategy_payload/", response_model=StrategyPayloadSchema)
+async def get_strategy_payload(
+    db: Session = Depends(get_db),
+    user_data: dict = Depends(verify_token)
+):
+    user_id: UUID = user_data["user_id"]
 
-# @router.get("/trades_details/", response_model=List[TradeDetailsSchema])
-# async def get_trade_details(
-#     db: Session = Depends(get_db),
-#     user_data: dict = Depends(verify_token)
-# ):
-#     print(user_data, "user_data")  # Should contain "user_id" and "email"
-    
-#     trades = db.query(TradeDetails)\
-#         .options(joinedload(TradeDetails.token))\
-#         .filter(TradeDetails.user_id == user_data["user_id"])\
-#         .all()
+    # Fetch newest strategy payload for this user
+    trade = (
+        db.query(StrategyPayload)
+        .filter(StrategyPayload.user_id == user_id)
+        .order_by(desc(StrategyPayload.created_at))
+        .first()
+    )
 
-#     if not trades:
-#         raise HTTPException(status_code=404, detail="No trades found")
+    if not trade:
+        raise HTTPException(status_code=404, detail="No strategy payload found for this user")
 
-#     return trades
-
+    return trade

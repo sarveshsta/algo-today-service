@@ -90,6 +90,39 @@ class Trade(Base):
         return f"<Trade(symbol='{self.symbol}', trade_type='{self.trade_type}')>"
 
 
+class StrategyPayload(Base):
+    __tablename__ = "strategy_strategypayload"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("algo_app_user.id"), nullable=True)  # Replace `auth_user` with your actual user table
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("strategy_strategy.id"), nullable=True)
+    index = Column(String(100), nullable=False)
+    expiry = Column(String(100), nullable=False)
+    strike_price = Column(Float, nullable=True)
+    option_type = Column(String(100), nullable=True)
+    quantity = Column(Integer, nullable=False)
+    trade_amount = Column(Float, nullable=False)
+    target_profit = Column(Float, nullable=False)
+    candle_duration = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships (optional, if you want ORM-based navigation)
+    user = relationship("User", backref="StrategyPayload")  # Only if you have a User model defined
+    strategy = relationship("Strategy", backref="StrategyPayload")  # Only if Strategy is a model
+
+    def __repr__(self):
+        return (
+            f"<StrategyPayload(index='{self.index}', "
+            f"expiry='{self.expiry}', "
+            f"strike_price={self.strike_price}, "
+            f"option_type='{self.option_type}', "
+            f"quantity={self.quantity}, "
+            f"trade_amount={self.trade_amount}, "
+            f"target_profit={self.target_profit}, "
+            f"candle_duration='{self.candle_duration}')>"
+        )
+
+
 class Order(Base):
     __tablename__ = "orders"
 

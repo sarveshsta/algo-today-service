@@ -7,7 +7,7 @@ from time import sleep, time
 from typing import List, Dict
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from trades.models import TradeDetails, Trade
+from trades.models import TradeDetails, Trade, StrategyPayload
 from datetime import datetime, timedelta
 from SmartApi.smartConnect import SmartConnect
 from config.database.config import SessionLocal
@@ -308,6 +308,46 @@ def save_trade_record(
         
         logger.info(f"✅ Trade saved successfully: {trade_type} at price {ltp} for symbol {symbol}")
         return new_trade
+
+    except Exception as e:
+        logger.error(f"❌ Error saving trade (non-critical): {e}")
+        if db:
+            try:
+                db.rollback()
+            except:
+                pass
+    finally:
+        if db:
+            try:
+                db.close()
+            except:
+                pass
+
+
+def save_strategy_payload(user_id:str, payload: dict):
+  
+    db = None
+    try:
+        db = SessionLocal()
+        strategy_payload = StrategyPayload( 
+            user_id=user_id,
+            strategy_id=payload["strategy_id"],
+            index = payload["index"],
+            expiry = payload["expiry"],
+            strike_price = payload["strike_price"],
+            option_type = payload["option_type"],
+            quantity = payload["quantity"],
+            trade_amount = payload["trade_amount"],
+            target_profit = payload["target_profit"],
+            candle_duration = payload["candle_duration"]
+        )
+        
+        db.add(strategy_payload)
+        db.commit()
+        db.refresh(strategy_payload)
+        
+        logger.info(f"✅ payload saved successfully:")
+        return strategy_payload
 
     except Exception as e:
         logger.error(f"❌ Error saving trade (non-critical): {e}")

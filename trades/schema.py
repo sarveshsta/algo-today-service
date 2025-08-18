@@ -160,3 +160,21 @@ class Order(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StrategyPayloadSchema(BaseModel):
+    id: UUID
+    user_id: UUID | None
+    strategy_id: UUID | None
+    index: str
+    expiry: str
+    strike_price: float | None
+    option_type: str | None
+    quantity: int
+    trade_amount: float
+    target_profit: float
+    candle_duration: str
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

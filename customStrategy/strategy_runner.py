@@ -4,7 +4,7 @@ import os
 import operator
 import pandas as pd
 from .strategy_state import is_running, stop_strategy_flag
-from .utils import get_candle_data, save_trade, save_trade_record
+from .utils import get_candle_data, save_trade, save_trade_record, save_strategy_payload
 import pandas_ta as ta
 from .indicators import apply_indicator
 from .instrument_utils import get_instruments_from_openapi
@@ -192,7 +192,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
     )
     print(start_msg)
     asyncio.run(send_log(start_msg))
-
+    save_strategy_payload(user_data['user_id'], payload)
     while is_running(strategy_id):
         asyncio.run(broadcast_strategy_status({"strategy_id": strategy_id, "is_running":True}))
         msg = f"\n📈 Fetching candle data for: {symbol}"
