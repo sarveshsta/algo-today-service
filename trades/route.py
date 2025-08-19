@@ -21,6 +21,8 @@ from trades.schema import (
     StrategyPayloadSchema
 )
 from uuid import UUID
+from sqlalchemy import desc, func, cast, Date
+from datetime import date
 router = fastapi.APIRouter()
 
 
@@ -62,13 +64,30 @@ async def get_trade_details(
 
     return trades
 
-@router.get("/trades/", response_model=List[TradeSchema])
+# @router.get("/trades/", response_model=List[TradeSchema])
+# async def get_trade_details(
+#     db: Session = Depends(get_db),
+#     user_data: dict = Depends(verify_token)
+# ):
+#     user_id = user_data['user_id']
+#     print(user_id, "user_data") 
+
+#     trades = db.query(Trade) \
+#         .filter(Trade.user_id == user_id) \
+#         .order_by(desc(Trade.created_at)) \
+#         .all()
+
+#     if not trades:
+#         raise HTTPException(status_code=404, detail="No trades found for the user")
+
+#     return trades
+@router.get("/trades/")
 async def get_trade_details(
     db: Session = Depends(get_db),
     user_data: dict = Depends(verify_token)
 ):
     user_id = user_data['user_id']
-    print(user_id, "user_data") 
+    print(user_id, "user_data")
 
     trades = db.query(Trade) \
         .filter(Trade.user_id == user_id) \
@@ -78,8 +97,21 @@ async def get_trade_details(
     if not trades:
         raise HTTPException(status_code=404, detail="No trades found for the user")
 
-    return trades
+    # ✅ Calculate today's profit and loss
+    today = date.today()
+    day_profit_and_loss = (
+        db.query(func.sum(Trade.pnl))
+        .filter(
+            Trade.user_id == user_id,
+            cast(Trade.created_at, Date) == today
+        )
+        .scalar()
+    ) or 0.0
 
+    return {
+        "day_profit_and_loss": day_profit_and_loss,
+     "result": trades,
+    }
 
 @router.get("/{index}", response_model=List[ExpirySchema])
 async def get_index_expiry(index: str, db: Session = Depends(get_db)):
