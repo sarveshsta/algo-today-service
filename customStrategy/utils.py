@@ -334,7 +334,7 @@ def save_strategy_payload(user_id:str, payload: dict):
             strategy_id=payload["strategy_id"],
             index = payload["index"],
             expiry = payload["expiry"],
-            strike_price = payload["strike_price"],
+            strike_price =  payload["strike_price"] * 100,
             option_type = payload["option_type"],
             quantity = payload["quantity"],
             trade_amount = payload["trade_amount"],

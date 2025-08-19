@@ -123,7 +123,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from trades.strategy.optimization import SmartApiDataProvider
-
+from apscheduler.schedulers.background import BackgroundScheduler
 from SmartApi import SmartConnect
 import trades.models as trades_models
 import users.models as user_models
@@ -145,9 +145,12 @@ from trades.stream import WSApp
 from users import route as user_route
 from customStrategy import routes as custom_strategy_routes
 from trades.strategy import optimization as strategy_route
+from trades.managers import delete_all_tokens, fetch_tokens
 from fastapi import WebSocket, WebSocketDisconnect
 from log_stream import register_client, unregister_client
-
+import atexit
+from sqlalchemy.orm import Session
+from config.database.config import get_db
 # Database initialization
 user_models.Base.metadata.create_all(bind=engine)
 trades_models.Base.metadata.create_all(bind=engine)
@@ -272,7 +275,25 @@ async def message_listener(pubsub_client: PubSubClient):
             handle_activity(message, pubsub_client)
         except NotEventException:
             pass
+def scheduled_job():
+    db: Session = next(get_db())  # manually get DB session
+    try:
+        print("Running scheduled job...")
+        delete_all_tokens(db)
+        fetch_tokens(db)
+        print("Jobs completed successfully")
+    except Exception as e:
+        print("Error in scheduled job:", e)
+    finally:
+        db.close()
 
+# Scheduler setup
+scheduler = BackgroundScheduler()
+scheduler.add_job(scheduled_job, "interval", days=7)  # run every 7 days
+scheduler.start()
+
+# Shutdown scheduler on exit
+atexit.register(lambda: scheduler.shutdown())
 
 @app.get("/", tags=["Root"])
 async def read_root():
