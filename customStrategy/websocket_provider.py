@@ -75,24 +75,26 @@ def on_data(wsapp, msg):
 def on_error(wsapp, error):
     logger.error(f"WebSocket error: {error}")
 
-def on_close(wsapp, status, reason):
-    logger.info(f"WebSocket closed: {status} → {reason}")
+def on_close(wsapp, status=None, reason=None):
+    logger.info(f"WebSocket closed: status={status}, reason={reason}")
 
 def close_connection(sws):
+    sws.retry_strategy = None
     sws.max_retry_attempt = 0
     sws.close_connection()
 
 def connectFeed(sws, token_list=None):
     def on_open(wsapp):
-        logger.info("WebSocket opened")
+        logger.info("🔗 WebSocket opened")
         if token_list:
             payload = [{"exchangeType": 2, "tokens": token_list}]
-            logger.info(f"Subscribing: {payload}")
+            logger.info(f"➕ Subscribing: {payload}")
             sws.subscribe(CORRELATION_ID, FEED_MODE, payload)
 
     sws.on_open = on_open
     sws.on_data = on_data
     sws.on_error = on_error
-    sws.on_close = on_close
+    sws.on_close = on_close  # our safe override
 
     threading.Thread(target=sws.connect, daemon=True).start()
+

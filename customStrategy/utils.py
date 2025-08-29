@@ -14,6 +14,7 @@ from config.database.config import SessionLocal
 from users.models import User, AngelOneCredential
 from trades.managers import get_token_uuid_by_token_value
 from .instrument_utils import get_instruments_from_openapi
+from decimal import Decimal, ROUND_HALF_UP
 
 
 load_dotenv()
@@ -78,7 +79,7 @@ def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUT
         print("🕒 From:", from_date, "To:", to_date)
 
         instruments = get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), token)
-        print("🎯 Tokens fetched:", instruments)
+        # print("🎯 Tokens fetched:", instruments)
 
         if not instruments:
             raise ValueError("❌ No instruments returned. Check NFO_DATA_URL or token match.")
@@ -91,10 +92,10 @@ def get_candle_data(token: List[str], exchange: str, interval: str = "FIVE_MINUT
             "todate": to_date.strftime("%Y-%m-%d %H:%M")
         }
 
-        print("📤 Request Params:", params)
+        # print("📤 Request Params:", params)
 
         response = smartapi.getCandleData(params)
-        print("📥 Raw response:", response)
+        # print("📥 Raw response:", response)
 
         candles = response.get('data')
         if not candles:
@@ -334,7 +335,7 @@ def save_strategy_payload(user_id:str, payload: dict):
             strategy_id=payload["strategy_id"],
             index = payload["index"],
             expiry = payload["expiry"],
-            strike_price =  payload["strike_price"] * 100,
+            strike_price=(Decimal(payload["strike_price"]) * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
             option_type = payload["option_type"],
             quantity = payload["quantity"],
             trade_amount = payload["trade_amount"],

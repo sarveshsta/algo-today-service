@@ -225,6 +225,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
             if evaluate_group(df, conditions, "pre_buy", ltp=current_close):
                 buy_cond = next((c for c in conditions if c["type"] == "buy"), None)
                 if buy_cond:
+                    print("Evaluating BUY conditions...")
                     if buy_cond["comparison_type"] == "spot":
                         entry_price = current_close
                         msg = f"📈 Buy condition matched: SPOT | Entry price (LTP): ₹{entry_price:.2f}"
