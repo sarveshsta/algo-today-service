@@ -75,21 +75,23 @@ async def run_strategy(payload: StrategyStartInput,
         if SHARED_SWS is None or not getattr(SHARED_SWS, "connected", False):
             print("📡 Creating shared SmartWebSocket connection...")
             SHARED_SWS = SmartWebSocketV2(jwt_token, credentials['api_key'], credentials['client_code'], feed_token)
-            print(dir(SHARED_SWS), "data")
-            SHARED_FEED_TOKENS = set()
-            connectFeed(SHARED_SWS)  # Start WS thread
-            # register_websocket(payload.strategy_id, SHARED_SWS)
-            sleep(1)  # Give it a moment to connect
+            connectFeed(SHARED_SWS)
+        
+            # Start connection
+            # Thread(target=SHARED_SWS.connect, daemon=True).start()
+            sleep(2)  # Wait for connection handshake
+
         else:
             print("♻️ Using existing WebSocket connection...")
 
-        # Subscribe only if not already subscribed
+        # Now subscribe
         if token_int not in SHARED_FEED_TOKENS:
             print(f"➕ Subscribing to token {token_int}")
             SHARED_SWS.subscribe(CORRELATION_ID, FEED_MODE, [{"exchangeType": 2, "tokens": [token_int]}])
             SHARED_FEED_TOKENS.add(token_int)
         else:
             print(f"✅ Already subscribed to token {token_int}")
+
 
     except DataException as de:
         print(f"🚫 Rate limit or SmartAPI error: {de}")
