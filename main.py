@@ -289,7 +289,7 @@ def scheduled_job():
 
 # Scheduler setup
 scheduler = BackgroundScheduler()
-scheduler.add_job(scheduled_job, "interval", days=7)  # run every 7 days
+scheduler.add_job(scheduled_job, "interval", hours=1) 
 scheduler.start()
 
 # Shutdown scheduler on exit
