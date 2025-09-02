@@ -22,6 +22,8 @@ from .utils import get_user_credentials,SmartAPIService, get_smartapi_connection
 from SmartApi.smartConnect import SmartConnect
 from SmartApi.smartExceptions import DataException
 from log_stream import send_log
+from fastapi import Response, status
+
 
 router = APIRouter()
 
@@ -35,7 +37,10 @@ SHARED_FEED_TOKENS = set()
 
 
 @router.post("/run-strategy")
-async def run_strategy(payload: StrategyStartInput, user_data: dict = Depends(verify_token), db: session = Depends(get_db)):
+async def run_strategy(payload: StrategyStartInput, 
+                       user_data: dict = Depends(verify_token), 
+                       db: session = Depends(get_db),
+                       response: Response = None):
     print("📥 Strategy payload received:", payload.dict())
     print("🔐 Authenticated user:", user_data)
 
@@ -47,6 +52,7 @@ async def run_strategy(payload: StrategyStartInput, user_data: dict = Depends(ve
     instruments = get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), [symbol])
 
     if not instruments:
+        response.status_code = status.HTTP_404_NOT_FOUND
         return {"message": f"❌ Instrument {symbol} not found", "success": False}
 
     token_int = int(instruments[0]["token"])
@@ -87,9 +93,11 @@ async def run_strategy(payload: StrategyStartInput, user_data: dict = Depends(ve
 
     except DataException as de:
         print(f"🚫 Rate limit or SmartAPI error: {de}")
+        response.status_code = status.HTTP_429_TOO_MANY_REQUESTS
         return {"message": f"Rate limit or authentication error: {de}", "success": False}
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return {"message": f"Failed to initialize SmartAPI connection: {e}", "success": False}
 
     print("⚙️ Setting up LTP provider...")
@@ -105,8 +113,9 @@ async def run_strategy(payload: StrategyStartInput, user_data: dict = Depends(ve
     )
     thread.start()
     register_thread(payload.strategy_id, thread)
-
+    response.status_code = status.HTTP_200_OK
     return {"message": f"✅ Strategy {payload.strategy_id} started.", "success": True}
+
 
 
 @router.post("/stop-strategy")
