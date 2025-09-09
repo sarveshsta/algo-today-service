@@ -16,7 +16,7 @@ from .schema import StrategyStartInput  # adjust import based on your project
 from middlewares.auth_middleware import verify_token
 from fastapi import HTTPException
 from config.database.config import get_db
-from .utils import get_user_credentials,SmartAPIService, get_smartapi_connection
+from .utils import get_user_credentials,SmartAPIService, get_smartapi_connection, delete_strategy_payload
 
 
 from SmartApi.smartConnect import SmartConnect
@@ -121,14 +121,15 @@ async def run_strategy(payload: StrategyStartInput,
 
 
 @router.post("/stop-strategy")
-async def stop_strategy(strategy_id: str):
+async def stop_strategy(strategy_id: str, user_data: dict = Depends(verify_token)):
+    print("🔐 Authenticated user:", user_data)
+    delete_strategy_payload(user_data['user_id'])
     stop_strategy_flag(strategy_id)
     return {"success": True,"message": f"Strategy {strategy_id} stop signal sent."}
 
 @router.post("/strategy-status")
 async def strategy_status(strategy_id: str):
     status = is_running(strategy_id)
-    await send_log("hello bhai")
     message = (
         f"Strategy {strategy_id} is currently running."
         if status else

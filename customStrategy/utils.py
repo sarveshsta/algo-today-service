@@ -363,3 +363,30 @@ def save_strategy_payload(user_id:str, payload: dict):
                 db.close()
             except:
                 pass
+
+def delete_strategy_payload(user_id: str):
+    db = None
+    try:
+        db = SessionLocal()
+        
+        # Delete all entries for this user_id
+        deleted_count = db.query(StrategyPayload).filter(
+            StrategyPayload.user_id == user_id
+        ).delete(synchronize_session=False)
+        
+        db.commit()
+        return {"deleted": deleted_count}
+
+    except Exception as e:
+        logger.error(f"❌ Error deleting payloads: {e}")
+        if db:
+            try:
+                db.rollback()
+            except:
+                pass
+    finally:
+        if db:
+            try:
+                db.close()
+            except:
+                pass

@@ -74,7 +74,9 @@ def evaluate_condition(df, condition, ltp=None):
             val = df[col].iloc[-1] * condition.get("left_factor", 1)
             const = condition["constant_value"]
             result = op(val, const)
-            print(f"📌 Condition: {col.upper()} {condition['operator']} {const} → {val:.2f} {result}")
+            indicator_vs_value_msg = f"📌 Condition: {col.upper()} {condition['operator']} {const} → {val:.2f} {result}"
+            print(indicator_vs_value_msg)
+            asyncio.run(send_log(indicator_vs_value_msg))
             return result
 
         # --- INDICATOR vs INDICATOR ---
@@ -84,7 +86,9 @@ def evaluate_condition(df, condition, ltp=None):
             left = df[left_col].iloc[-1] * condition.get("left_factor", 1)
             right = df[right_col].iloc[-1] * condition.get("right_factor", 1)
             result = op(left, right)
-            print(f"📌 Condition: {left_col.upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}")
+            indicator_vs_indicator_msg = f"📌 Condition: {left_col.upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}"
+            print(indicator_vs_indicator_msg)
+            asyncio.run(send_log(indicator_vs_indicator_msg))
             return result
 
         # --- OHLC vs INDICATOR ---
@@ -93,7 +97,9 @@ def evaluate_condition(df, condition, ltp=None):
             left = df[condition["left_ohlc"]].iloc[-condition.get("left_candle_offset", 1)] * condition.get("left_multiplier", 1)
             right = df[right_col].iloc[-1] * condition.get("right_factor", 1)
             result = op(left, right)
-            print(f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}")
+            ohlc_vs_indicator_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}"
+            print(ohlc_vs_indicator_msg)
+            asyncio.run(send_log(ohlc_vs_indicator_msg))
             return result
 
         # --- OHLC vs OHLC ---
@@ -101,7 +107,9 @@ def evaluate_condition(df, condition, ltp=None):
             left = df[condition["left_ohlc"]].iloc[-condition.get("left_candle_offset", 1)] * condition.get("left_multiplier", 1)
             right = df[condition["right_ohlc"]].iloc[-condition.get("right_candle_offset", 1)] * condition.get("right_multiplier", 1)
             result = op(left, right)
-            print(f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {condition['right_ohlc'].upper()} → {left:.2f} vs {right:.2f} {result}")
+            ohlc_vs_ohlc_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {condition['right_ohlc'].upper()} → {left:.2f} vs {right:.2f} {result}"
+            print(ohlc_vs_ohlc_msg)
+            asyncio.run(send_log(ohlc_vs_ohlc_msg))
             return result
 
         # --- OHLC vs LTP ---
@@ -110,16 +118,22 @@ def evaluate_condition(df, condition, ltp=None):
                 raise ValueError("LTP is required for 'ohlc_vs_ltp' comparison type.")
             left = df[condition["left_ohlc"]].iloc[-condition.get("left_candle_offset", 1)] * condition.get("left_multiplier", 1)
             result = op(left, ltp)
-            print(f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} LTP({ltp}) → {left:.2f} {result}")
+            ohlc_vs_ltp_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} LTP({ltp}) → {left:.2f} {result}"
+            print(ohlc_vs_ltp_msg)
+            asyncio.run(send_log(ohlc_vs_ltp_msg))
             return result
 
         # --- SPOT ---
         elif condition["comparison_type"] == "spot":
-            print("📌 Condition: SPOT → True")
+            spot_msg = "📌 Condition: SPOT → True"
+            print(spot_msg)
+            asyncio.run(send_log(spot_msg))
             return True
 
     except Exception as e:
-        print(f"❌ Error evaluating condition: {condition} → {e}")
+        error_msg = f"❌ Error evaluating condition: {condition} → {e}"
+        print(error_msg)
+        asyncio.run(send_log(error_msg))
         return False
 
 
@@ -131,8 +145,9 @@ def evaluate_group(df, conditions, cond_type, ltp=None):
 
     expr = ""
     all_results = []
-    print(f"\n🔍 Evaluating {cond_type.upper()} conditions...")
-
+    group_cond_msg = f"\n🔍 Evaluating {cond_type.upper()} conditions..."
+    print(group_cond_msg)
+    asyncio.run(send_log(group_cond_msg))
     for i, cond in enumerate(group):
         result = evaluate_condition(df, cond, ltp=ltp)
         logic = cond.get("logic_operator")
@@ -144,16 +159,22 @@ def evaluate_group(df, conditions, cond_type, ltp=None):
         else:
             prev_logic = all_results[i - 1][2]
             if not prev_logic:
-                print(f"⚠️ Missing logic_operator in condition index {i}: {cond}")
+                missing_logic_operator_msg = f"⚠️ Missing logic_operator in condition index {i}: {cond}"
+                print(missing_logic_operator_msg)
+                asyncio.run(send_log(missing_logic_operator_msg))
                 return False
             expr = f"({expr} {prev_logic.lower()} {result})"
 
     try:
         final_result = eval(expr)
-        print(f"🧮 Final Expression: {expr} → {final_result}")
+        final_exp_msg = f"🧮 Final Expression: {expr} → {final_result}"
+        print(final_exp_msg)
+        asyncio.run(send_log(final_exp_msg))
         return final_result
     except Exception as e:
-        print(f"❌ Error evaluating logical expression: {expr} → {e}")
+        error_msg = f"❌ Error evaluating logical expression: {expr} → {e}"
+        print(error_msg)
+        asyncio.run(send_log(error_msg))
         return False
 
 
@@ -194,7 +215,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
     asyncio.run(send_log(start_msg))
     save_strategy_payload(user_data['user_id'], payload)
     while is_running(strategy_id):
-        asyncio.run(broadcast_strategy_status({"strategy_id": strategy_id, "is_running":True}))
+        # asyncio.run(broadcast_strategy_status({"strategy_id": strategy_id, "is_running":True}))
         msg = f"\n📈 Fetching candle data for: {symbol}"
         print(msg)
         asyncio.run(send_log(msg))
