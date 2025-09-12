@@ -12,6 +12,7 @@ def get_instruments_from_openapi(url: str, tokens: List[str]) -> List[Dict]:
             item for item in data
             if item.get("exch_seg") == "NFO" and item.get("symbol") in tokens
         ]
+        print(filtered, "filtered")
         return filtered
 
     except Exception as e:

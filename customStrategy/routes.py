@@ -47,10 +47,11 @@ async def run_strategy(payload: StrategyStartInput,
     start_strategy_flag(payload.strategy_id)
 
     # Build symbol string
-    symbol = f"{payload.index}{payload.expiry}{payload.strike_price}{payload.option_type}"
+    # symbol = f"{payload.index}{payload.expiry}{payload.strike_price}{payload.option_type}"
+    symbol = f"{payload.index}{payload.expiry}{payload.strike_price}{payload.option_type}".upper().strip()
     print(f"🔍 Looking for instrument: {symbol}")
     instruments = get_instruments_from_openapi(os.getenv("NFO_DATA_URL"), [symbol])
-
+    print(instruments, "instruments")
     if not instruments:
         response.status_code = status.HTTP_404_NOT_FOUND
         return {"message": f"❌ Instrument {symbol} not found", "success": False}
