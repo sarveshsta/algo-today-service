@@ -20,7 +20,7 @@ def normalize_indicator_name(indicator, candle_count):
         return "macd_line"  # or "macd_signal" depending on what you want to compare
     return ind
 
-def apply_missing_indicators(df, conditions):
+def apply_missing_indicators(df, conditions, user_id):
     """
     Automatically applies all missing indicators from conditions to the DataFrame.
     EMA, SMA, RSI, MACD supported.
@@ -50,11 +50,11 @@ def apply_missing_indicators(df, conditions):
                     used_indicators.add(col_name)
                     msg = f"✅ Applied indicator: {col_name}"
                     print(msg)
-                    asyncio.run(send_log(msg))
+                    asyncio.run(send_log(user_id, msg))
     return df
 
 
-def evaluate_condition(df, condition, ltp=None):
+def evaluate_condition(df, condition, user_id, ltp=None):
     """Evaluates a single StrategyCondition dictionary against the DataFrame and logs details."""
     op_map = {
         ">": operator.gt,
@@ -76,7 +76,7 @@ def evaluate_condition(df, condition, ltp=None):
             result = op(val, const)
             indicator_vs_value_msg = f"📌 Condition: {col.upper()} {condition['operator']} {const} → {val:.2f} {result}"
             print(indicator_vs_value_msg)
-            asyncio.run(send_log(indicator_vs_value_msg))
+            asyncio.run(send_log(user_id, indicator_vs_value_msg))
             return result
 
         # --- INDICATOR vs INDICATOR ---
@@ -88,7 +88,7 @@ def evaluate_condition(df, condition, ltp=None):
             result = op(left, right)
             indicator_vs_indicator_msg = f"📌 Condition: {left_col.upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}"
             print(indicator_vs_indicator_msg)
-            asyncio.run(send_log(indicator_vs_indicator_msg))
+            asyncio.run(send_log(user_id, indicator_vs_indicator_msg))
             return result
 
         # --- OHLC vs INDICATOR ---
@@ -99,7 +99,7 @@ def evaluate_condition(df, condition, ltp=None):
             result = op(left, right)
             ohlc_vs_indicator_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {right_col.upper()} → {left:.2f} vs {right:.2f} {result}"
             print(ohlc_vs_indicator_msg)
-            asyncio.run(send_log(ohlc_vs_indicator_msg))
+            asyncio.run(send_log(user_id, ohlc_vs_indicator_msg))
             return result
 
         # --- OHLC vs OHLC ---
@@ -109,7 +109,7 @@ def evaluate_condition(df, condition, ltp=None):
             result = op(left, right)
             ohlc_vs_ohlc_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} {condition['right_ohlc'].upper()} → {left:.2f} vs {right:.2f} {result}"
             print(ohlc_vs_ohlc_msg)
-            asyncio.run(send_log(ohlc_vs_ohlc_msg))
+            asyncio.run(send_log(user_id, ohlc_vs_ohlc_msg))
             return result
 
         # --- OHLC vs LTP ---
@@ -120,24 +120,24 @@ def evaluate_condition(df, condition, ltp=None):
             result = op(left, ltp)
             ohlc_vs_ltp_msg = f"📌 Condition: {condition['left_ohlc'].upper()} {condition['operator']} LTP({ltp}) → {left:.2f} {result}"
             print(ohlc_vs_ltp_msg)
-            asyncio.run(send_log(ohlc_vs_ltp_msg))
+            asyncio.run(send_log(user_id, ohlc_vs_ltp_msg))
             return result
 
         # --- SPOT ---
         elif condition["comparison_type"] == "spot":
             spot_msg = "📌 Condition: SPOT → True"
             print(spot_msg)
-            asyncio.run(send_log(spot_msg))
+            asyncio.run(send_log(user_id, spot_msg))
             return True
 
     except Exception as e:
         error_msg = f"❌ Error evaluating condition: {condition} → {e}"
         print(error_msg)
-        asyncio.run(send_log(error_msg))
+        asyncio.run(send_log(user_id, error_msg))
         return False
 
 
-def evaluate_group(df, conditions, cond_type, ltp=None):
+def evaluate_group(df, conditions, cond_type, user_id, ltp=None):
     """Evaluates a group of conditions using their logic operators, with detailed logging."""
     group = [c for c in conditions if c["type"] == cond_type]
     if not group:
@@ -147,9 +147,9 @@ def evaluate_group(df, conditions, cond_type, ltp=None):
     all_results = []
     group_cond_msg = f"\n🔍 Evaluating {cond_type.upper()} conditions..."
     print(group_cond_msg)
-    asyncio.run(send_log(group_cond_msg))
+    asyncio.run(send_log(user_id, group_cond_msg))
     for i, cond in enumerate(group):
-        result = evaluate_condition(df, cond, ltp=ltp)
+        result = evaluate_condition(df, cond, user_id, ltp=ltp)
         logic = cond.get("logic_operator")
         all_results.append((cond, result, logic))
 
@@ -161,7 +161,7 @@ def evaluate_group(df, conditions, cond_type, ltp=None):
             if not prev_logic:
                 missing_logic_operator_msg = f"⚠️ Missing logic_operator in condition index {i}: {cond}"
                 print(missing_logic_operator_msg)
-                asyncio.run(send_log(missing_logic_operator_msg))
+                asyncio.run(send_log(user_id, missing_logic_operator_msg))
                 return False
             expr = f"({expr} {prev_logic.lower()} {result})"
 
@@ -169,12 +169,12 @@ def evaluate_group(df, conditions, cond_type, ltp=None):
         final_result = eval(expr)
         final_exp_msg = f"🧮 Final Expression: {expr} → {final_result}"
         print(final_exp_msg)
-        asyncio.run(send_log(final_exp_msg))
+        asyncio.run(send_log(user_id, final_exp_msg))
         return final_result
     except Exception as e:
         error_msg = f"❌ Error evaluating logical expression: {expr} → {e}"
         print(error_msg)
-        asyncio.run(send_log(error_msg))
+        asyncio.run(send_log(user_id, error_msg))
         return False
 
 
@@ -198,7 +198,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
     if not instruments:
         msg = f"❌ No instrument found for symbol: {symbol}"
         print(msg)
-        asyncio.run(send_log(msg))
+        asyncio.run(send_log(user_data['user_id'], msg))
         stop_strategy_flag(strategy_id)
         return
 
@@ -212,24 +212,24 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
         f"📋 Total Conditions: {len(conditions)}\n"
     )
     print(start_msg)
-    asyncio.run(send_log(start_msg))
+    asyncio.run(send_log(user_data['user_id'], start_msg))
     save_strategy_payload(user_data['user_id'], payload)
     while is_running(strategy_id):
         # asyncio.run(broadcast_strategy_status({"strategy_id": strategy_id, "is_running":True}))
         msg = f"\n📈 Fetching candle data for: {symbol}"
         print(msg)
-        asyncio.run(send_log(msg))
+        asyncio.run(send_log(user_data['user_id'], msg))
 
         df = get_candle_data(token=[symbol], exchange="NFO", interval=interval, days=1, credentials=credentials)
         if df.empty:
             retry_msg = "⚠️ Candle data is empty. Retrying in 5 seconds..."
             print(retry_msg)
-            asyncio.run(send_log(retry_msg))
+            asyncio.run(send_log(user_data['user_id'],retry_msg))
             time.sleep(5)
             continue
         print("🛠️ Applying indicators...")
-        asyncio.run(send_log("🛠️ Applying indicators..."))
-        df = apply_missing_indicators(df, conditions)
+        asyncio.run(send_log(user_data['user_id'],"🛠️ Applying indicators..."))
+        df = apply_missing_indicators(df, conditions, user_data['user_id'])
 
         
 
@@ -239,11 +239,11 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
             f"\n📊 Current Signal: {signal.upper()} | LTP: ₹{current_close:.2f} | Total PnL: ₹{total_profit:.2f}"
         )
         print(status_msg)
-        asyncio.run(send_log(status_msg))
+        asyncio.run(send_log(user_data['user_id'], status_msg))
 
         # ----------- Buy Logic -------------
         if signal == "buy":
-            if evaluate_group(df, conditions, "pre_buy", ltp=current_close):
+            if evaluate_group(df, conditions, "pre_buy", user_data['user_id'], ltp=current_close):
                 buy_cond = next((c for c in conditions if c["type"] == "buy"), None)
                 if buy_cond:
                     print("Evaluating BUY conditions...")
@@ -301,14 +301,14 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                         asyncio.run(send_log(f"🟢 BUY executed at ₹{entry_price:.2f}"))
                         asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "BUY"}))
                     elif buy_cond["comparison_type"] == "ohlc_vs_ltp":
-                        if evaluate_condition(df, buy_cond, ltp=current_close):
+                        if evaluate_condition(df, buy_cond, user_data['user_id'], ltp=current_close):
                             entry_price = current_close
                             lot_size = int(token_model.lotsize)
                             max_lots_affordable = int(trade_amount // (entry_price * lot_size))
                             if max_lots_affordable < 1:
                                 err = f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f}"
                                 print(err)
-                                asyncio.run(send_log(err))
+                                asyncio.run(send_log(user_data['user_id'], err))
                                 stop_strategy_flag(strategy_id)
                                 break
 
@@ -343,23 +343,23 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                           pnl=total_profit,
                                           order_type="NRML",
                                           strategy_id=strategy_id)
-                            asyncio.run(send_log(f"🟢 BUY (ohlc_vs_ltp) executed at ₹{entry_price:.2f}"))
+                            asyncio.run(send_log(user_data['user_id'], f"🟢 BUY (ohlc_vs_ltp) executed at ₹{entry_price:.2f}"))
                             asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "BUY"}))
                         else:
-                            asyncio.run(send_log("⏳ Buy condition (ohlc_vs_ltp) not met. Waiting..."))
+                            asyncio.run(send_log(user_data['user_id'], "⏳ Buy condition (ohlc_vs_ltp) not met. Waiting..."))
                     else:
                         msg = f"❌ Unsupported buy comparison_type: {buy_cond['comparison_type']}"
                         print(msg)
-                        asyncio.run(send_log(msg))
+                        asyncio.run(send_log(user_data['user_id'],msg))
                 else:
-                    asyncio.run(send_log("⚠️ No BUY condition found."))
+                    asyncio.run(send_log(user_data['user_id'],"⚠️ No BUY condition found."))
             else:
                 print("⏳ Pre-buy condition not met. Waiting...")
-                asyncio.run(send_log("⏳ Pre-buy condition not met. Waiting..."))
+                asyncio.run(send_log(user_data['user_id'],"⏳ Pre-buy condition not met. Waiting..."))
 
         # ----------- Sell Logic -------------
         elif signal == "sell":
-            if evaluate_group(df, conditions, "pre_sell", ltp=current_close):
+            if evaluate_group(df, conditions, "pre_sell", user_data['user_id'], ltp=current_close):
                 target_cond = next((c for c in conditions if c["type"] == "target"), None)
                 sl_cond = next((c for c in conditions if c["type"] == "stop_loss"), None)
                 sell_cond = next((c for c in conditions if c["type"] == "sell"), None)
@@ -374,7 +374,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                     )
                     if current_close >= target_price:
                         target_hit = True
-                        asyncio.run(send_log(f"🎯 Target reached at ₹{current_close:.2f} (Target: ₹{target_price:.2f})"))
+                        asyncio.run(send_log(user_data['user_id'], f"🎯 Target reached at ₹{current_close:.2f} (Target: ₹{target_price:.2f})"))
 
                 if sl_cond:
                     sl_price = (
@@ -384,15 +384,15 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                     )
                     if current_close <= sl_price:
                         sl_hit = True
-                        asyncio.run(send_log(f"🛑 Stop-loss hit at ₹{current_close:.2f} (SL: ₹{sl_price:.2f})"))
+                        asyncio.run(send_log(user_data['user_id'], f"🛑 Stop-loss hit at ₹{current_close:.2f} (SL: ₹{sl_price:.2f})"))
 
                 if sell_cond:
                     if sell_cond["comparison_type"] == "spot":
                         sell_match = True
                     elif sell_cond["comparison_type"] == "ohlc_vs_ltp":
-                        sell_match = evaluate_condition(df, sell_cond, ltp=current_close)
+                        sell_match = evaluate_condition(df, sell_cond, user_data['user_id'], ltp=current_close)
                     if sell_match:
-                        asyncio.run(send_log(f"🟢 SELL signal matched at ₹{current_close:.2f}"))
+                        asyncio.run(send_log(user_data['user_id'], f"🟢 SELL signal matched at ₹{current_close:.2f}"))
 
                 if target_hit or sl_hit or sell_match:
                     # order_id, order_details = service.place_order(
@@ -412,7 +412,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                     status = "🟢 Profit" if pnl >= 0 else "🔻 Loss"
                     msg = f"🔴 SELL at ₹{current_close:.2f} → {status}: ₹{abs(pnl):.2f} | Total PnL: ₹{total_profit:.2f}"
                     print(msg)
-                    asyncio.run(send_log(msg))
+                    asyncio.run(send_log(user_data['user_id'], msg))
                     signal = "buy"
                     save_trade(signal_type="SELL", 
                                 quantity=actual_qty, 
@@ -431,14 +431,14 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                     strategy_id=strategy_id)
                     asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "SELL"}))
                 else:
-                    asyncio.run(send_log("⏳ No sell condition met (target/SL/sell). Waiting..."))
+                    asyncio.run(send_log(user_data['user_id'], "⏳ No sell condition met (target/SL/sell). Waiting..."))
             else:
-                asyncio.run(send_log("⏳ Pre-sell condition not met. Waiting..."))
+                asyncio.run(send_log(user_data['user_id'], "⏳ Pre-sell condition not met. Waiting..."))
 
         if total_profit >= target_profit:
             final_msg = f"\n🎯 Target profit reached: ₹{total_profit:.2f}. Stopping strategy."
             print(final_msg)
-            asyncio.run(send_log(final_msg))
+            asyncio.run(send_log(user_data['user_id'], final_msg))
             stop_strategy_flag(strategy_id)
             break
 
@@ -446,4 +446,4 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
 
     end_msg = f"\n⏹️ Strategy [{strategy_id}] completed. Final Profit: ₹{total_profit:.2f}\n"
     print(end_msg)
-    asyncio.run(send_log(end_msg))
+    asyncio.run(send_log(user_data['user_id'], end_msg))

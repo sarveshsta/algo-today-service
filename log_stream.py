@@ -1,15 +1,19 @@
 from fastapi import WebSocket
-from typing import List
+from typing import List, Dict
 
-connected_clients: List[WebSocket] = []
+connected_clients: Dict[str, List[WebSocket]] = {}
 
-async def register_client(websocket: WebSocket):
+async def register_client(websocket: WebSocket, user_id: str):
     await websocket.accept()
-    connected_clients.append(websocket)
+    if user_id not in connected_clients:
+        connected_clients[user_id] = []
+    connected_clients[user_id].append(websocket)
 
-def unregister_client(websocket: WebSocket):
-    if websocket in connected_clients:
-        connected_clients.remove(websocket)
+def unregister_client(websocket: WebSocket, user_id: str):
+    if user_id in connected_clients and websocket in connected_clients[user_id]:
+        connected_clients[user_id].remove(websocket)
+        if not connected_clients[user_id]:  # cleanup if empty
+            del connected_clients[user_id]
 
 async def broadcast_trade_saved(trade_data: dict):
     message = {
@@ -39,9 +43,15 @@ async def broadcast_strategy_status(strategy_status: dict):
     for client in disconnected_clients:
         unregister_client(client)
 
-async def send_log(message: str):
-    for client in connected_clients:
+async def send_log(user_id: str, message: str):
+    if user_id not in connected_clients:
+        return
+    disconnected_clients = []
+    for client in connected_clients[user_id]:
         try:
             await client.send_text(message)
         except:
-            pass
+            disconnected_clients.append(client)
+
+    for client in disconnected_clients:
+        unregister_client(client, user_id)
