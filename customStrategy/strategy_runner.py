@@ -259,7 +259,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                         if max_lots_affordable < 1:
                             err = f"❌ Insufficient capital to buy even 1 lot at ₹{entry_price:.2f} (Trade Amt: ₹{trade_amount})"
                             print(err)
-                            asyncio.run(send_log(err))
+                            asyncio.run(send_log(user_data['user_id'],err))
                             stop_strategy_flag(strategy_id)
                             break
 
