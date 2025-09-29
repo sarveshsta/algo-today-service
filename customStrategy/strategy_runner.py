@@ -251,7 +251,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                         entry_price = current_close
                         msg = f"📈 Buy condition matched: SPOT | Entry price (LTP): ₹{entry_price:.2f}"
                         print(msg)
-                        asyncio.run(send_log(msg))
+                        asyncio.run(send_log(user_data['user_id'],msg))
 
                         lot_size = int(token_model.lotsize)
                         max_lots_affordable = int(trade_amount // (entry_price * lot_size))
@@ -268,7 +268,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
 
                         buy_msg = f"🛒 Executing BUY → Requested: {quantity} lot(s) | Executing: {lots_to_trade} lot(s) → Qty: {actual_qty}"
                         print(buy_msg)
-                        asyncio.run(send_log(buy_msg))
+                        asyncio.run(send_log(user_data['user_id'],buy_msg))
                         # order_id, order_details = service.place_order(
                         #     symbol=token_model["symbol"],
                         #     token=token_model["token"],
@@ -298,7 +298,7 @@ def strategy_worker(payload, ltp_provider, credentials, service, user_data):
                                           pnl=total_profit,
                                           order_type="NRML",
                                           strategy_id=strategy_id)
-                        asyncio.run(send_log(f"🟢 BUY executed at ₹{entry_price:.2f}"))
+                        asyncio.run(send_log(user_data['user_id'],f"🟢 BUY executed at ₹{entry_price:.2f}"))
                         asyncio.run(broadcast_trade_saved({"symbol": symbol, "trade_type": "BUY"}))
                     elif buy_cond["comparison_type"] == "ohlc_vs_ltp":
                         if evaluate_condition(df, buy_cond, user_data['user_id'], ltp=current_close):
