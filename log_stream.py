@@ -21,13 +21,16 @@ async def broadcast_trade_saved(trade_data: dict):
         "payload": trade_data
     }
     disconnected_clients = []
-    for client in connected_clients:
-        try:
-            await client.send_json(message)
-        except:
-            disconnected_clients.append(client)
-    for client in disconnected_clients:
-        unregister_client(client)
+
+    for user_id, websockets in connected_clients.items():
+        for ws in websockets:
+            try:
+                await ws.send_json(message)
+            except:
+                disconnected_clients.append((ws, user_id))
+
+    for ws, user_id in disconnected_clients:
+        unregister_client(ws, user_id)
 
 async def broadcast_strategy_status(strategy_status: dict):
     message = {
@@ -35,13 +38,16 @@ async def broadcast_strategy_status(strategy_status: dict):
         "payload": strategy_status
     }
     disconnected_clients = []
-    for client in connected_clients:
-        try:
-            await client.send_json(message)
-        except:
-            disconnected_clients.append(client)
-    for client in disconnected_clients:
-        unregister_client(client)
+
+    for user_id, websockets in connected_clients.items():
+        for ws in websockets:
+            try:
+                await ws.send_json(message)
+            except:
+                disconnected_clients.append((ws, user_id))
+
+    for ws, user_id in disconnected_clients:
+        unregister_client(ws, user_id)
 
 async def send_log(user_id: str, message: str):
     if user_id not in connected_clients:
